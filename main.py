@@ -207,27 +207,137 @@ def collect_rows(page) -> list:
     return kept
 
 
-def settle(page) -> None:
-    """中継ページ（数秒後に自動遷移）を抜けるまで待つ。"""
-    for _ in range(12):
+def is_interstitial(page) -> bool:
+    """いま中継ページ（数秒後に自動で次の画面が表示されます）にいるか。"""
+    try:
+        return any(hint in collect_text(page) for hint in INTERSTITIAL_HINTS)
+    except Exception:
+        return False
+
+
+# ブラウザの中で「まだ中継ページか」を判定するための JavaScript
+LEFT_INTERSTITIAL_JS = """() => {
+    const t = document.body ? document.body.innerText : '';
+    return !t.includes('自動で次の画面') && !t.includes('こちらをクリック');
+}"""
+
+
+def wait_until_left(page, seconds: int) -> bool:
+    """
+    中継ページを抜けるまで、何も触らずに待つ。抜けたら True。
+
+    JKKねっとは応答がとても遅いことがある。ここで焦って「こちら」を
+    押し直すと、送信中のリクエストが取り消されて永久に進まなくなる。
+    だから "待つ" ことがいちばん大事。
+    """
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        remaining = max(1, int(deadline - time.time()))
         try:
-            page.wait_for_load_state("networkidle", timeout=6_000)
+            page.wait_for_function(
+                LEFT_INTERSTITIAL_JS, timeout=min(remaining, 10) * 1000
+            )
+            return True
         except Exception:
-            pass
-        text = collect_text(page)
-        if not any(hint in text for hint in INTERSTITIAL_HINTS):
-            break
-        # 自動遷移が働かないとき用の保険
-        try:
-            link = page.query_selector("a:has-text('こちら')")
-            if link:
-                link.click(timeout=3_000)
-            else:
-                page.evaluate("document.forms[0] && document.forms[0].submit()")
-        except Exception:
-            pass
-        page.wait_for_timeout(1_500)
-    page.wait_for_timeout(1_200)
+            # 画面遷移の最中は判定に失敗することがあるので、直接もう一度確かめる
+            if not is_interstitial(page):
+                return True
+            page.wait_for_timeout(500)
+    return False
+
+
+def describe_page(page) -> str:
+    """
+    いま画面に何があるのかを調べてログに残す。
+    うまくいかなかったとき、原因を特定するための手がかりになる。
+    """
+    try:
+        info = page.evaluate(
+            r"""() => {
+                const forms = Array.from(document.forms).map(f => ({
+                    name: f.name || null,
+                    action: f.action || null,
+                    method: f.method || null,
+                    fields: Array.from(f.elements).map(e => e.name).filter(Boolean).slice(0, 12)
+                }));
+                const links = Array.from(document.querySelectorAll('a')).slice(0, 8).map(a => ({
+                    text: (a.innerText || '').trim().slice(0, 20),
+                    href: (a.getAttribute('href') || '').slice(0, 140)
+                }));
+                return {
+                    url: location.href,
+                    frames: window.frames.length,
+                    forms: forms,
+                    links: links,
+                    scripts: Array.from(document.scripts)
+                        .map(s => (s.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160))
+                        .filter(Boolean).slice(0, 3)
+                };
+            }"""
+        )
+        return json.dumps(info, ensure_ascii=False)[:1800]
+    except Exception as e:  # noqa: BLE001
+        return f"(調べられませんでした: {e})"
+
+
+def settle(page, patient: bool = True) -> None:
+    """
+    中継ページを抜けて、結果ページが表示されるまで面倒をみる。
+
+    方針は「まず待つ。どうしても動かないときだけ、1回だけ押す」。
+    patient=False にすると待ち時間を短くする（予備ルート用）。
+    """
+    if not is_interstitial(page):
+        return
+
+    first_wait = 60 if patient else 40
+    retry_wait = 90 if patient else 50
+
+    # --- 第1段階：何もせずに待つ ---
+    log(f"中継ページを検出しました。自動遷移をそのまま待ちます（最大{first_wait}秒）")
+    if wait_until_left(page, first_wait):
+        log("自動遷移で次の画面に進みました")
+        page.wait_for_timeout(2_000)
+        return
+
+    # --- 進まないので、何が置かれているか記録してから手を出す ---
+    log(f"{first_wait}秒待っても進みませんでした。画面の中身を調べます")
+    log(f"画面の構成: {describe_page(page)}")
+
+    # --- 第2段階：「こちら」を1回だけ押して、また待つ（最大90秒） ---
+    try:
+        log("「こちら」を1回だけクリックします")
+        page.click("a:has-text('こちら')", timeout=10_000)
+        if wait_until_left(page, retry_wait):
+            log("クリックで次の画面に進みました")
+            page.wait_for_timeout(2_000)
+            return
+    except Exception as e:  # noqa: BLE001
+        log(f"「こちら」をクリックできませんでした: {e}")
+
+    # --- 第3段階：ページ内のフォームを直接送信して、また待つ（最大90秒） ---
+    try:
+        submitted = page.evaluate(
+            """() => {
+                const f = document.forms[0];
+                if (!f) return false;
+                f.submit();
+                return true;
+            }"""
+        )
+        if submitted:
+            log("フォームを直接送信しました")
+            if wait_until_left(page, retry_wait):
+                log("フォーム送信で次の画面に進みました")
+                page.wait_for_timeout(2_000)
+                return
+        else:
+            log("送信できるフォームが見つかりませんでした")
+    except Exception as e:  # noqa: BLE001
+        log(f"フォーム送信に失敗しました: {e}")
+
+    log("中継ページを抜けられませんでした")
+    page.wait_for_timeout(1_500)
 
 
 # 画面の種類を見分けるための目印
@@ -274,7 +384,7 @@ def open_result_page(page) -> tuple:
     # --- 順路A：公式ページ経由（本命） ---
     try:
         log(f"公式ページを開きます: {PROPERTY_PAGE}")
-        page.goto(PROPERTY_PAGE, wait_until="domcontentloaded", timeout=60_000)
+        page.goto(PROPERTY_PAGE, wait_until="domcontentloaded", timeout=90_000)
         page.wait_for_timeout(1_500)
 
         # ページ内から、PC版の空室確認リンク（Mobile版ではないほう）を探す
@@ -288,7 +398,7 @@ def open_result_page(page) -> tuple:
         target = href or TARGET_URL
         log(f"空室確認リンクへ移動します: {target}")
         # referer を付けることで「公式ページから来た」と正しく伝わる
-        page.goto(target, referer=PROPERTY_PAGE, wait_until="domcontentloaded", timeout=60_000)
+        page.goto(target, referer=PROPERTY_PAGE, wait_until="domcontentloaded", timeout=90_000)
         settle(page)
 
         body_text = collect_text(page)
@@ -304,8 +414,8 @@ def open_result_page(page) -> tuple:
     # --- 順路B：直リンクをそのまま開く（予備） ---
     try:
         log(f"順路B を試します: {TARGET_URL}")
-        page.goto(TARGET_URL, referer=PROPERTY_PAGE, wait_until="domcontentloaded", timeout=60_000)
-        settle(page)
+        page.goto(TARGET_URL, referer=PROPERTY_PAGE, wait_until="domcontentloaded", timeout=90_000)
+        settle(page, patient=False)
 
         body_text = collect_text(page)
         rows = collect_rows(page)
@@ -343,7 +453,7 @@ def fetch_page():
             extra_http_headers={"Accept-Language": "ja-JP,ja;q=0.9"},
         )
         page = context.new_page()
-        page.set_default_timeout(45_000)
+        page.set_default_timeout(60_000)
 
         body_text, rows, name_hit, state, final_url = open_result_page(page)
         save_debug(page, body_text)
