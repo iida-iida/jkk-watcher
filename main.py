@@ -289,41 +289,25 @@ def reach_results(page, popups: list, patient: bool = True):
     """
     中継ページから結果ページへ進み、"結果が表示されているページ" を返す。
 
-    JKKねっとは検索結果を別ウィンドウ（window.open した "JKKnet"）に出す。
-    そのため、元のページを見続けても永久に変わらない。
+    JKKねっとの中継ページは、検索結果を別ウィンドウ（window.open した
+    "JKKnet"）に出そうとする。ところが実機で確認したところ、その別ウィンドウは
+    開くだけで中身が来ないことが多い。
+    確実かつ速いのは「フォームの表示先をこのページに書き換えて送り直す」方法
+    （実測3秒）なので、そちらを先に試す。
     """
     if not is_waiting(page):
         return page  # すでに結果が出ている
 
-    popup_wait = 25 if patient else 15
+    first_wait = 10 if patient else 5
     long_wait = 90 if patient else 50
 
-    # --- 手段1：別ウィンドウが開くのを待って、そちらへ乗り換える ---
-    log(f"中継ページを検出。別ウィンドウが開くか待ちます（最大{popup_wait}秒）")
-    deadline = time.time() + popup_wait
-    while time.time() < deadline and not popups:
-        try:
-            page.wait_for_timeout(500)
-        except Exception:
-            time.sleep(0.5)
+    # --- 手段0：ごく短時間だけ、自然に進むのを待つ ---
+    log(f"中継ページを検出。まず{first_wait}秒だけ自動遷移を待ちます")
+    if wait_until_arrived(page, first_wait):
+        log("自動遷移で結果が表示されました")
+        return page
 
-    if popups:
-        target = popups[-1]
-        log(f"別ウィンドウを検出しました（{len(popups)}個）。そちらを読みます")
-        try:
-            target.wait_for_load_state("domcontentloaded", timeout=30_000)
-        except Exception:
-            pass
-        if wait_until_arrived(target, long_wait):
-            log(f"別ウィンドウに結果が表示されました: {target.url}")
-            return target
-        log("別ウィンドウが結果まで進みませんでした")
-        log(f"別ウィンドウの状態: {describe_page(target)}")
-    else:
-        log("別ウィンドウは開きませんでした")
-
-    # --- 手段2：送信先を「このページ」に書き換えて送り直す ---
-    log(f"元のページの状態: {describe_page(page)}")
+    # --- 手段1（本命）：送信先を「このページ」に書き換えて送り直す ---
     log("フォームの表示先を現在のページに変更して送信します")
     try:
         ok = page.evaluate(
@@ -339,20 +323,26 @@ def reach_results(page, popups: list, patient: bool = True):
         log(f"フォームの送信に失敗しました: {e}")
         ok = False
 
-    if ok:
-        if wait_until_arrived(page, long_wait):
-            log("同じページに結果が表示されました")
-            return page
-        log("送信しましたが結果まで進みませんでした")
-    else:
-        log("送信できるフォームが見つかりませんでした")
+    if ok and wait_until_arrived(page, long_wait):
+        log("同じページに結果が表示されました")
+        return page
 
-    # --- 手段3：この間に別ウィンドウが開いていないか、最後にもう一度確認 ---
+    if not ok:
+        log("送信できるフォームが見つかりませんでした")
+        log(f"元のページの状態: {describe_page(page)}")
+
+    # --- 手段2（予備）：別ウィンドウが開いていれば、そちらを見る ---
     if popups:
         target = popups[-1]
-        if wait_until_arrived(target, 30):
-            log("遅れて開いた別ウィンドウに結果が表示されました")
+        log(f"予備として別ウィンドウを確認します（{len(popups)}個）")
+        try:
+            target.wait_for_load_state("domcontentloaded", timeout=30_000)
+        except Exception:
+            pass
+        if wait_until_arrived(target, long_wait):
+            log(f"別ウィンドウに結果が表示されました: {target.url}")
             return target
+        log(f"別ウィンドウの状態: {describe_page(target)}")
 
     log("結果ページにたどり着けませんでした")
     return page
@@ -369,9 +359,13 @@ def read_page(page):
 # 画面の種類を見分けるための目印
 ERROR_MARKERS = ("エラーが発生しました", "URLを直接入力", "ただいま大変混雑")
 EMPTY_MARKERS = (
-    "該当する住宅がありません", "該当する住宅はありません", "該当するお部屋がありません",
-    "条件に一致する", "検索結果は0件", "0件でした", "見つかりませんでした",
-    "あき家がありません", "現在募集中の住宅はありません",
+    # JKKねっとが実際に返す文言（2026年9月時点で実機確認済み）
+    "空室はございませんでした",
+    "条件を変更して再度検索",
+    # 表現ゆれへの備え
+    "空室はありませんでした", "該当する住宅がありません", "該当する住宅はありません",
+    "該当するお部屋がありません", "条件に一致する", "検索結果は0件", "0件でした",
+    "見つかりませんでした", "あき家がありません", "現在募集中の住宅はありません",
 )
 
 
