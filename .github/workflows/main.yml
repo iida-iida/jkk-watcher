@@ -55,7 +55,7 @@ jobs:
           HIGHLIGHT_FLOOR: "4"
           HIGHLIGHT_MADORI: "3LDK"
           STRICT_MODE: "false"          # true にすると本命条件の部屋だけ通知
-          SEND_DAILY_HEARTBEAT: "true" # true にすると1日1回「稼働中」を通知
+          SEND_DAILY_HEARTBEAT: "false" # true にすると1日1回「稼働中」を通知
         run: python main.py
 
       - name: 画面キャプチャを保存（手動実行時・失敗時のみ）
