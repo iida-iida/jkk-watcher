@@ -18,6 +18,7 @@ JKKねっと「あき家検索」自動監視スクリプト
   DISCORD_WEBHOOK_URL  … 必須。Discord の Webhook URL
   TARGET_BUILDING      … 住宅名（表示用）     既定: コーシャハイム久我山
   TARGET_BUILDING_KANA … 住宅名のカタカナ表記 既定: コーシャハイムクガヤマ
+  TARGET_PROPERTY_PAGE … JKK公式のその住宅のページURL（ここを経由してアクセスします）
   HIGHLIGHT_TOU        … 本命の棟（任意）     既定: D
   HIGHLIGHT_FLOOR      … 本命の階（任意）     既定: 4
   HIGHLIGHT_MADORI     … 本命の間取り（任意） 既定: 3LDK
@@ -55,6 +56,12 @@ STRICT_MODE = os.getenv("STRICT_MODE", "false").lower() == "true"
 SEND_DAILY_HEARTBEAT = os.getenv("SEND_DAILY_HEARTBEAT", "false").lower() == "true"
 
 WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+
+# JKK公式の物件ページ。ここを経由してリンクを辿ることで「URL直接入力」扱いを回避する
+PROPERTY_PAGE = os.getenv(
+    "TARGET_PROPERTY_PAGE",
+    "https://www.to-kousya.or.jp/chintai/reco/kh_kugayama.html",
+).strip()
 
 STATE_PATH = pathlib.Path("state.json")
 DEBUG_DIR = pathlib.Path("debug")
@@ -200,8 +207,130 @@ def collect_rows(page) -> list:
     return kept
 
 
+def settle(page) -> None:
+    """中継ページ（数秒後に自動遷移）を抜けるまで待つ。"""
+    for _ in range(12):
+        try:
+            page.wait_for_load_state("networkidle", timeout=6_000)
+        except Exception:
+            pass
+        text = collect_text(page)
+        if not any(hint in text for hint in INTERSTITIAL_HINTS):
+            break
+        # 自動遷移が働かないとき用の保険
+        try:
+            link = page.query_selector("a:has-text('こちら')")
+            if link:
+                link.click(timeout=3_000)
+            else:
+                page.evaluate("document.forms[0] && document.forms[0].submit()")
+        except Exception:
+            pass
+        page.wait_for_timeout(1_500)
+    page.wait_for_timeout(1_200)
+
+
+# 画面の種類を見分けるための目印
+ERROR_MARKERS = ("エラーが発生しました", "URLを直接入力", "ただいま大変混雑")
+EMPTY_MARKERS = (
+    "該当する住宅がありません", "該当する住宅はありません", "該当するお部屋がありません",
+    "条件に一致する", "検索結果は0件", "0件でした", "見つかりませんでした",
+    "あき家がありません", "現在募集中の住宅はありません",
+)
+
+
+def classify(body_text: str, rows: list, name_hit: bool) -> str:
+    """
+    ページの種類を判定する。
+      "results" … あき家が載っている
+      "empty"   … 正常に表示されたが、あき家は無い
+      "error"   … エラー画面 or 見慣れない画面（＝故障の可能性）
+    "empty" と "error" をきちんと分けるのが肝。ここを混同すると、
+    スクリプトが壊れていても「あき家なし」に見えてしまい永久に気づけない。
+    """
+    if rows:
+        return "results"
+    if any(marker in body_text for marker in ERROR_MARKERS):
+        return "error"
+    if any(marker in body_text for marker in EMPTY_MARKERS):
+        return "empty"
+    # 住宅名が出ているのに行が拾えない場合も、正常表示とみなす
+    if name_hit:
+        return "empty"
+    # あき家検索の画面らしい言葉があれば、空室ゼロと判断
+    if "あき家" in body_text and ("検索" in body_text or "募集" in body_text):
+        return "empty"
+    return "error"
+
+
+def open_result_page(page) -> tuple:
+    """
+    JKKねっとの結果ページを開く。
+
+    JKKねっとは「URLを直接入力した」アクセスをエラー扱いで弾く。
+    そこで、まず公式の物件ページを開き、そこに貼られている
+    「最新の空室状況を確認する」リンクを辿る＝人間と同じ順路を再現する。
+    """
+    # --- 順路A：公式ページ経由（本命） ---
+    try:
+        log(f"公式ページを開きます: {PROPERTY_PAGE}")
+        page.goto(PROPERTY_PAGE, wait_until="domcontentloaded", timeout=60_000)
+        page.wait_for_timeout(1_500)
+
+        # ページ内から、PC版の空室確認リンク（Mobile版ではないほう）を探す
+        href = page.evaluate(
+            """() => {
+                const links = Array.from(document.querySelectorAll("a[href*='akiyaJyokenDirect']"));
+                const pc = links.find(a => !a.href.includes('Mobile'));
+                return pc ? pc.href : null;
+            }"""
+        )
+        target = href or TARGET_URL
+        log(f"空室確認リンクへ移動します: {target}")
+        # referer を付けることで「公式ページから来た」と正しく伝わる
+        page.goto(target, referer=PROPERTY_PAGE, wait_until="domcontentloaded", timeout=60_000)
+        settle(page)
+
+        body_text = collect_text(page)
+        rows = collect_rows(page)
+        name_hit = (BUILDING in body_text) or (BUILDING_KANA in body_text)
+        state = classify(body_text, rows, name_hit)
+        log(f"順路A の結果: {state}")
+        if state != "error":
+            return body_text, rows, name_hit, state, page.url
+    except Exception as e:  # noqa: BLE001
+        log(f"順路A が失敗しました: {e}")
+
+    # --- 順路B：直リンクをそのまま開く（予備） ---
+    try:
+        log(f"順路B を試します: {TARGET_URL}")
+        page.goto(TARGET_URL, referer=PROPERTY_PAGE, wait_until="domcontentloaded", timeout=60_000)
+        settle(page)
+
+        body_text = collect_text(page)
+        rows = collect_rows(page)
+        name_hit = (BUILDING in body_text) or (BUILDING_KANA in body_text)
+        state = classify(body_text, rows, name_hit)
+        log(f"順路B の結果: {state}")
+        return body_text, rows, name_hit, state, page.url
+    except Exception as e:  # noqa: BLE001
+        log(f"順路B も失敗しました: {e}")
+        return "", [], False, "error", page.url
+
+
+def save_debug(page, body_text: str) -> None:
+    """あとから中身を確認できるように、画面と本文を残す。"""
+    try:
+        DEBUG_DIR.mkdir(exist_ok=True)
+        (DEBUG_DIR / "page.txt").write_text(body_text, encoding="utf-8")
+        (DEBUG_DIR / "page.html").write_text(page.content(), encoding="utf-8")
+        page.screenshot(path=str(DEBUG_DIR / "page.png"), full_page=True)
+    except Exception as e:  # noqa: BLE001
+        log(f"デバッグ出力の保存に失敗（無視して続行）: {e}")
+
+
 def fetch_page():
-    """JKKねっとを開いて、結果ページの本文テキストと行リストを返す。"""
+    """ブラウザを立ち上げて結果ページを取得する。"""
     with sync_playwright() as p:
         browser = p.chromium.launch(
             args=["--disable-blink-features=AutomationControlled"]
@@ -216,48 +345,13 @@ def fetch_page():
         page = context.new_page()
         page.set_default_timeout(45_000)
 
-        log(f"アクセス先: {TARGET_URL}")
-        page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=60_000)
-
-        # 中継ページを抜けるまで最大でおよそ1分待つ
-        for _ in range(12):
-            try:
-                page.wait_for_load_state("networkidle", timeout=6_000)
-            except Exception:
-                pass
-            text = collect_text(page)
-            if not any(hint in text for hint in INTERSTITIAL_HINTS):
-                break
-            # 自動遷移が働かないとき用の保険（リンク or フォーム送信）
-            try:
-                link = page.query_selector("a:has-text('こちら')")
-                if link:
-                    link.click(timeout=3_000)
-                else:
-                    page.evaluate("document.forms[0] && document.forms[0].submit()")
-            except Exception:
-                pass
-            page.wait_for_timeout(1_500)
-
-        page.wait_for_timeout(1_200)  # 描画の取りこぼし防止
-
-        body_text = collect_text(page)
-        rows = collect_rows(page)
-        final_url = page.url
-
-        # あとから中身を確認できるようにデバッグ出力を残す
-        try:
-            DEBUG_DIR.mkdir(exist_ok=True)
-            (DEBUG_DIR / "page.txt").write_text(body_text, encoding="utf-8")
-            (DEBUG_DIR / "page.html").write_text(page.content(), encoding="utf-8")
-            page.screenshot(path=str(DEBUG_DIR / "page.png"), full_page=True)
-        except Exception as e:  # noqa: BLE001
-            log(f"デバッグ出力の保存に失敗（無視して続行）: {e}")
+        body_text, rows, name_hit, state, final_url = open_result_page(page)
+        save_debug(page, body_text)
 
         context.close()
         browser.close()
 
-    return body_text, rows, final_url
+    return body_text, rows, name_hit, state, final_url
 
 
 # ---------------------------------------------------------------------------
@@ -329,35 +423,45 @@ def main() -> int:
     log(f"{jitter} 秒待ってからアクセスします")
     time.sleep(jitter)
 
-    try:
-        body_text, rows, final_url = fetch_page()
-    except Exception as e:  # noqa: BLE001
+    def record_failure(reason: str) -> int:
+        """取得できなかったときの共通処理。前回の掲載記録は消さずに残す。"""
         state["fail_streak"] = int(state.get("fail_streak", 0)) + 1
-        log(f"取得に失敗しました（連続 {state['fail_streak']} 回目）: {e}")
+        log(f"取得に失敗しました（連続 {state['fail_streak']} 回目）: {reason}")
         # 10分間隔で6回＝約1時間続けて失敗したときだけ、1度お知らせする
         if state["fail_streak"] == 6:
             post_discord(
                 "⚠️ JKKねっとの監視が1時間ほど連続で失敗しています。\n"
                 "サイトのメンテナンス中か、ページ構成が変わった可能性があります。\n"
-                f"エラー内容: `{str(e)[:300]}`"
+                "Actionsタブから手動実行して debug/page.png を確認してください。\n"
+                f"詳細: `{reason[:300]}`"
             )
         state["date"] = today
         save_state(state)
         return 0
 
+    try:
+        body_text, rows, name_hit, page_state, final_url = fetch_page()
+    except Exception as e:  # noqa: BLE001
+        return record_failure(str(e))
+
+    log(
+        f"画面の種類: {page_state} / 抽出した行数: {len(rows)} / "
+        f"住宅名ヒット: {name_hit} / 最終URL: {final_url}"
+    )
+
+    # 見慣れない画面＝故障の可能性。"あき家ゼロ" と混同しないよう失敗として扱う
+    if page_state == "error":
+        head = normalize(body_text)[:200] or "（本文が空でした）"
+        return record_failure(f"想定外の画面が返りました: {head}")
+
     state["fail_streak"] = 0
 
-    # 住宅名がページのどこにも出ていない＝あき家なし、と判断する
-    name_hit = (BUILDING in body_text) or (BUILDING_KANA in body_text)
-
-    if not name_hit:
-        rows = []
-    elif len(rows) > 30:
+    if len(rows) > 30:
         # 想定より多い＝住宅名で絞り込めていない可能性。名前を含む行だけに限定する
         rows = [r for r in rows if (BUILDING in r) or (BUILDING_KANA in r)]
+        log(f"住宅名で絞り込み: {len(rows)} 行")
 
     rooms = [parse_room(r) for r in rows]
-    log(f"抽出した行数: {len(rows)} / 住宅名ヒット: {name_hit} / 最終URL: {final_url}")
 
     if STRICT_MODE:
         rooms = [r for r in rooms if r["is_target"]]
