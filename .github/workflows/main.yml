@@ -49,6 +49,8 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           TARGET_BUILDING: コーシャハイム久我山
           TARGET_BUILDING_KANA: コーシャハイムクガヤマ
+          # JKKねっとは「URL直接入力」を弾くため、必ず公式ページを経由します
+          TARGET_PROPERTY_PAGE: "https://www.to-kousya.or.jp/chintai/reco/kh_kugayama.html"
           HIGHLIGHT_TOU: "D"
           HIGHLIGHT_FLOOR: "4"
           HIGHLIGHT_MADORI: "3LDK"
