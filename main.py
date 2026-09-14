@@ -7,18 +7,21 @@ JKKねっと「あき家検索」自動監視スクリプト
 指定した住宅（既定：コーシャハイム久我山）のあき家状況を定期的にチェックし、
 "新しく出てきた部屋" だけを Discord に通知します。
 
-【このスクリプトの考え方】
-・JKK公式の住宅ページに貼られている「最新の空室状況を確認する」という
-  直リンクを使います。検索フォームを1つずつ操作しないので壊れにくい構成です。
-・一度通知した部屋は state.json に記録するので、同じ部屋は二度通知しません。
-・部屋が消えた（＝申込終了）ら記録からも消すので、
-  将来また同じ部屋が再掲載されたときはあらためて通知されます。
+【JKKねっとの特殊な作りと、その攻略法】
+1) URLを直接入力したアクセスはエラーで弾かれる
+   → JKK公式の物件ページを先に開き、そこのリンクを辿る（順路を再現）
+2) 検索結果は「別ウィンドウ」に表示される
+   （中継ページの JavaScript が window.open で新しい窓を開いている）
+   → 新しく開いたウィンドウを捕まえて、そちらの中身を読む
+   → 開かなかった場合は、送信先を同じページに書き換えて送り直す
+3) サイトの応答がとても遅いことがある
+   → 焦って押し直さず、じっくり待つ
 
 【必要な環境変数】GitHub Actions の Secrets / env から渡します
   DISCORD_WEBHOOK_URL  … 必須。Discord の Webhook URL
   TARGET_BUILDING      … 住宅名（表示用）     既定: コーシャハイム久我山
   TARGET_BUILDING_KANA … 住宅名のカタカナ表記 既定: コーシャハイムクガヤマ
-  TARGET_PROPERTY_PAGE … JKK公式のその住宅のページURL（ここを経由してアクセスします）
+  TARGET_PROPERTY_PAGE … JKK公式のその住宅のページURL（経由地として使う）
   HIGHLIGHT_TOU        … 本命の棟（任意）     既定: D
   HIGHLIGHT_FLOOR      … 本命の階（任意）     既定: 4
   HIGHLIGHT_MADORI     … 本命の間取り（任意） 既定: 3LDK
@@ -57,7 +60,7 @@ SEND_DAILY_HEARTBEAT = os.getenv("SEND_DAILY_HEARTBEAT", "false").lower() == "tr
 
 WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 
-# JKK公式の物件ページ。ここを経由してリンクを辿ることで「URL直接入力」扱いを回避する
+# JKK公式の物件ページ。ここを経由することで「URL直接入力」扱いを回避する
 PROPERTY_PAGE = os.getenv(
     "TARGET_PROPERTY_PAGE",
     "https://www.to-kousya.or.jp/chintai/reco/kh_kugayama.html",
@@ -75,11 +78,10 @@ USER_AGENT = (
 
 def build_direct_url(kana: str) -> str:
     """
-    JKK公式の住宅ページにある「最新の空室状況を確認する」と同じURLを組み立てる。
+    JKK公式の物件ページにある「最新の空室状況を確認する」と同じURLを組み立てる。
 
     jutaku_name パラメータの正体は、カタカナ住宅名を UTF-16BE の16進数にしたもの。
       コーシャハイムクガヤマ -> 30B330FC30B730E330CF30A430E030AF30AC30E430DE
-    ここを差し替えれば、他の住宅の監視にもそのまま使えます。
     """
     param = kana.encode("utf-16-be").hex().upper()
     return (
@@ -154,11 +156,26 @@ def post_discord(content: str, embeds=None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. ページの取得（Playwright）
+# 4. ページを読む道具
 # ---------------------------------------------------------------------------
 
-# JKKねっとは、直リンクを開くと一度「中継ページ」を挟んでから結果ページへ飛ぶ
-INTERSTITIAL_HINTS = ("自動で次の画面", "しばらくたっても", "こちらをクリック")
+# 「まだ結果が出ていない画面」の目印
+WAITING_HINTS = (
+    "自動で次の画面",
+    "しばらくたっても",
+    "こちらをクリック",
+    "お待ちください",
+)
+
+# ブラウザの中で「結果画面まで進んだか」を判定するための JavaScript
+ARRIVED_JS = """() => {
+    const t = document.body ? document.body.innerText : '';
+    if (!t.trim()) return false;
+    if (t.includes('自動で次の画面')) return false;
+    if (t.includes('こちらをクリック')) return false;
+    if (t.includes('お待ちください')) return false;
+    return true;
+}"""
 
 
 def collect_text(page) -> str:
@@ -207,50 +224,43 @@ def collect_rows(page) -> list:
     return kept
 
 
-def is_interstitial(page) -> bool:
-    """いま中継ページ（数秒後に自動で次の画面が表示されます）にいるか。"""
+def is_waiting(page) -> bool:
+    """まだ「お待ちください」系の画面にいるか。"""
     try:
-        return any(hint in collect_text(page) for hint in INTERSTITIAL_HINTS)
+        return any(hint in collect_text(page) for hint in WAITING_HINTS)
     except Exception:
         return False
 
 
-# ブラウザの中で「まだ中継ページか」を判定するための JavaScript
-LEFT_INTERSTITIAL_JS = """() => {
-    const t = document.body ? document.body.innerText : '';
-    return !t.includes('自動で次の画面') && !t.includes('こちらをクリック');
-}"""
-
-
-def wait_until_left(page, seconds: int) -> bool:
+def wait_until_arrived(page, seconds: int) -> bool:
     """
-    中継ページを抜けるまで、何も触らずに待つ。抜けたら True。
+    結果画面にたどり着くまで、何も触らずに待つ。着いたら True。
 
-    JKKねっとは応答がとても遅いことがある。ここで焦って「こちら」を
-    押し直すと、送信中のリクエストが取り消されて永久に進まなくなる。
-    だから "待つ" ことがいちばん大事。
+    JKKねっとは応答がとても遅いことがある。ここで焦って押し直すと、
+    送信中のリクエストが取り消されて永久に進まなくなる。待つのが正解。
     """
     deadline = time.time() + seconds
     while time.time() < deadline:
         remaining = max(1, int(deadline - time.time()))
         try:
-            page.wait_for_function(
-                LEFT_INTERSTITIAL_JS, timeout=min(remaining, 10) * 1000
-            )
+            page.wait_for_function(ARRIVED_JS, timeout=min(remaining, 10) * 1000)
             return True
         except Exception:
             # 画面遷移の最中は判定に失敗することがあるので、直接もう一度確かめる
-            if not is_interstitial(page):
-                return True
-            page.wait_for_timeout(500)
+            try:
+                if not is_waiting(page) and normalize(collect_text(page)):
+                    return True
+            except Exception:
+                pass
+            try:
+                page.wait_for_timeout(500)
+            except Exception:
+                time.sleep(0.5)
     return False
 
 
 def describe_page(page) -> str:
-    """
-    いま画面に何があるのかを調べてログに残す。
-    うまくいかなかったとき、原因を特定するための手がかりになる。
-    """
+    """いま画面に何があるのかを調べてログに残す（原因特定の手がかり）。"""
     try:
         info = page.evaluate(
             r"""() => {
@@ -258,86 +268,102 @@ def describe_page(page) -> str:
                     name: f.name || null,
                     action: f.action || null,
                     method: f.method || null,
+                    target: f.target || null,
                     fields: Array.from(f.elements).map(e => e.name).filter(Boolean).slice(0, 12)
-                }));
-                const links = Array.from(document.querySelectorAll('a')).slice(0, 8).map(a => ({
-                    text: (a.innerText || '').trim().slice(0, 20),
-                    href: (a.getAttribute('href') || '').slice(0, 140)
                 }));
                 return {
                     url: location.href,
-                    frames: window.frames.length,
+                    title: document.title,
                     forms: forms,
-                    links: links,
-                    scripts: Array.from(document.scripts)
-                        .map(s => (s.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160))
-                        .filter(Boolean).slice(0, 3)
+                    text: (document.body ? document.body.innerText : '')
+                        .replace(/\s+/g, ' ').trim().slice(0, 200)
                 };
             }"""
         )
-        return json.dumps(info, ensure_ascii=False)[:1800]
+        return json.dumps(info, ensure_ascii=False)[:1500]
     except Exception as e:  # noqa: BLE001
         return f"(調べられませんでした: {e})"
 
 
-def settle(page, patient: bool = True) -> None:
+def reach_results(page, popups: list, patient: bool = True):
     """
-    中継ページを抜けて、結果ページが表示されるまで面倒をみる。
+    中継ページから結果ページへ進み、"結果が表示されているページ" を返す。
 
-    方針は「まず待つ。どうしても動かないときだけ、1回だけ押す」。
-    patient=False にすると待ち時間を短くする（予備ルート用）。
+    JKKねっとは検索結果を別ウィンドウ（window.open した "JKKnet"）に出す。
+    そのため、元のページを見続けても永久に変わらない。
     """
-    if not is_interstitial(page):
-        return
+    if not is_waiting(page):
+        return page  # すでに結果が出ている
 
-    first_wait = 60 if patient else 40
-    retry_wait = 90 if patient else 50
+    popup_wait = 25 if patient else 15
+    long_wait = 90 if patient else 50
 
-    # --- 第1段階：何もせずに待つ ---
-    log(f"中継ページを検出しました。自動遷移をそのまま待ちます（最大{first_wait}秒）")
-    if wait_until_left(page, first_wait):
-        log("自動遷移で次の画面に進みました")
-        page.wait_for_timeout(2_000)
-        return
+    # --- 手段1：別ウィンドウが開くのを待って、そちらへ乗り換える ---
+    log(f"中継ページを検出。別ウィンドウが開くか待ちます（最大{popup_wait}秒）")
+    deadline = time.time() + popup_wait
+    while time.time() < deadline and not popups:
+        try:
+            page.wait_for_timeout(500)
+        except Exception:
+            time.sleep(0.5)
 
-    # --- 進まないので、何が置かれているか記録してから手を出す ---
-    log(f"{first_wait}秒待っても進みませんでした。画面の中身を調べます")
-    log(f"画面の構成: {describe_page(page)}")
+    if popups:
+        target = popups[-1]
+        log(f"別ウィンドウを検出しました（{len(popups)}個）。そちらを読みます")
+        try:
+            target.wait_for_load_state("domcontentloaded", timeout=30_000)
+        except Exception:
+            pass
+        if wait_until_arrived(target, long_wait):
+            log(f"別ウィンドウに結果が表示されました: {target.url}")
+            return target
+        log("別ウィンドウが結果まで進みませんでした")
+        log(f"別ウィンドウの状態: {describe_page(target)}")
+    else:
+        log("別ウィンドウは開きませんでした")
 
-    # --- 第2段階：「こちら」を1回だけ押して、また待つ（最大90秒） ---
+    # --- 手段2：送信先を「このページ」に書き換えて送り直す ---
+    log(f"元のページの状態: {describe_page(page)}")
+    log("フォームの表示先を現在のページに変更して送信します")
     try:
-        log("「こちら」を1回だけクリックします")
-        page.click("a:has-text('こちら')", timeout=10_000)
-        if wait_until_left(page, retry_wait):
-            log("クリックで次の画面に進みました")
-            page.wait_for_timeout(2_000)
-            return
-    except Exception as e:  # noqa: BLE001
-        log(f"「こちら」をクリックできませんでした: {e}")
-
-    # --- 第3段階：ページ内のフォームを直接送信して、また待つ（最大90秒） ---
-    try:
-        submitted = page.evaluate(
+        ok = page.evaluate(
             """() => {
-                const f = document.forms[0];
+                const f = document.forwardForm || document.forms[0];
                 if (!f) return false;
+                f.target = '_self';   // 別ウィンドウではなく、このページに表示させる
                 f.submit();
                 return true;
             }"""
         )
-        if submitted:
-            log("フォームを直接送信しました")
-            if wait_until_left(page, retry_wait):
-                log("フォーム送信で次の画面に進みました")
-                page.wait_for_timeout(2_000)
-                return
-        else:
-            log("送信できるフォームが見つかりませんでした")
     except Exception as e:  # noqa: BLE001
-        log(f"フォーム送信に失敗しました: {e}")
+        log(f"フォームの送信に失敗しました: {e}")
+        ok = False
 
-    log("中継ページを抜けられませんでした")
-    page.wait_for_timeout(1_500)
+    if ok:
+        if wait_until_arrived(page, long_wait):
+            log("同じページに結果が表示されました")
+            return page
+        log("送信しましたが結果まで進みませんでした")
+    else:
+        log("送信できるフォームが見つかりませんでした")
+
+    # --- 手段3：この間に別ウィンドウが開いていないか、最後にもう一度確認 ---
+    if popups:
+        target = popups[-1]
+        if wait_until_arrived(target, 30):
+            log("遅れて開いた別ウィンドウに結果が表示されました")
+            return target
+
+    log("結果ページにたどり着けませんでした")
+    return page
+
+
+def read_page(page):
+    """ページから、本文・あき家の行・住宅名の有無を取り出す。"""
+    body_text = collect_text(page)
+    rows = collect_rows(page)
+    name_hit = (BUILDING in body_text) or (BUILDING_KANA in body_text)
+    return body_text, rows, name_hit
 
 
 # 画面の種類を見分けるための目印
@@ -355,77 +381,23 @@ def classify(body_text: str, rows: list, name_hit: bool) -> str:
       "results" … あき家が載っている
       "empty"   … 正常に表示されたが、あき家は無い
       "error"   … エラー画面 or 見慣れない画面（＝故障の可能性）
+
     "empty" と "error" をきちんと分けるのが肝。ここを混同すると、
     スクリプトが壊れていても「あき家なし」に見えてしまい永久に気づけない。
     """
     if rows:
         return "results"
+    if any(marker in body_text for marker in WAITING_HINTS):
+        return "error"
     if any(marker in body_text for marker in ERROR_MARKERS):
         return "error"
     if any(marker in body_text for marker in EMPTY_MARKERS):
         return "empty"
-    # 住宅名が出ているのに行が拾えない場合も、正常表示とみなす
     if name_hit:
         return "empty"
-    # あき家検索の画面らしい言葉があれば、空室ゼロと判断
     if "あき家" in body_text and ("検索" in body_text or "募集" in body_text):
         return "empty"
     return "error"
-
-
-def open_result_page(page) -> tuple:
-    """
-    JKKねっとの結果ページを開く。
-
-    JKKねっとは「URLを直接入力した」アクセスをエラー扱いで弾く。
-    そこで、まず公式の物件ページを開き、そこに貼られている
-    「最新の空室状況を確認する」リンクを辿る＝人間と同じ順路を再現する。
-    """
-    # --- 順路A：公式ページ経由（本命） ---
-    try:
-        log(f"公式ページを開きます: {PROPERTY_PAGE}")
-        page.goto(PROPERTY_PAGE, wait_until="domcontentloaded", timeout=90_000)
-        page.wait_for_timeout(1_500)
-
-        # ページ内から、PC版の空室確認リンク（Mobile版ではないほう）を探す
-        href = page.evaluate(
-            """() => {
-                const links = Array.from(document.querySelectorAll("a[href*='akiyaJyokenDirect']"));
-                const pc = links.find(a => !a.href.includes('Mobile'));
-                return pc ? pc.href : null;
-            }"""
-        )
-        target = href or TARGET_URL
-        log(f"空室確認リンクへ移動します: {target}")
-        # referer を付けることで「公式ページから来た」と正しく伝わる
-        page.goto(target, referer=PROPERTY_PAGE, wait_until="domcontentloaded", timeout=90_000)
-        settle(page)
-
-        body_text = collect_text(page)
-        rows = collect_rows(page)
-        name_hit = (BUILDING in body_text) or (BUILDING_KANA in body_text)
-        state = classify(body_text, rows, name_hit)
-        log(f"順路A の結果: {state}")
-        if state != "error":
-            return body_text, rows, name_hit, state, page.url
-    except Exception as e:  # noqa: BLE001
-        log(f"順路A が失敗しました: {e}")
-
-    # --- 順路B：直リンクをそのまま開く（予備） ---
-    try:
-        log(f"順路B を試します: {TARGET_URL}")
-        page.goto(TARGET_URL, referer=PROPERTY_PAGE, wait_until="domcontentloaded", timeout=90_000)
-        settle(page, patient=False)
-
-        body_text = collect_text(page)
-        rows = collect_rows(page)
-        name_hit = (BUILDING in body_text) or (BUILDING_KANA in body_text)
-        state = classify(body_text, rows, name_hit)
-        log(f"順路B の結果: {state}")
-        return body_text, rows, name_hit, state, page.url
-    except Exception as e:  # noqa: BLE001
-        log(f"順路B も失敗しました: {e}")
-        return "", [], False, "error", page.url
 
 
 def save_debug(page, body_text: str) -> None:
@@ -440,10 +412,13 @@ def save_debug(page, body_text: str) -> None:
 
 
 def fetch_page():
-    """ブラウザを立ち上げて結果ページを取得する。"""
+    """ブラウザを立ち上げて、あき家の結果ページを取得する。"""
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            args=["--disable-blink-features=AutomationControlled"]
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-popup-blocking",  # JKKは結果を別ウィンドウに出すので必須
+            ]
         )
         context = browser.new_context(
             user_agent=USER_AGENT,
@@ -452,16 +427,67 @@ def fetch_page():
             viewport={"width": 1280, "height": 900},
             extra_http_headers={"Accept-Language": "ja-JP,ja;q=0.9"},
         )
+
+        # 新しく開いたウィンドウを取りこぼさないよう、先に見張りを立てておく
+        popups = []
+        context.on("page", lambda p_: popups.append(p_))
+
         page = context.new_page()
         page.set_default_timeout(60_000)
 
-        body_text, rows, name_hit, state, final_url = open_result_page(page)
-        save_debug(page, body_text)
+        result = ("", [], False, "error", page.url)
+        shown = page
 
+        try:
+            # --- 順路A：公式の物件ページを開いて、そこのリンクを辿る ---
+            log(f"公式ページを開きます: {PROPERTY_PAGE}")
+            page.goto(PROPERTY_PAGE, wait_until="domcontentloaded", timeout=90_000)
+            page.wait_for_timeout(1_500)
+
+            href = page.evaluate(
+                """() => {
+                    const links = Array.from(document.querySelectorAll("a[href*='akiyaJyokenDirect']"));
+                    const pc = links.find(a => !a.href.includes('Mobile'));
+                    return pc ? pc.href : null;
+                }"""
+            )
+            target_url = href or TARGET_URL
+            log(f"空室確認リンクへ移動します: {target_url}")
+            page.goto(
+                target_url, referer=PROPERTY_PAGE,
+                wait_until="domcontentloaded", timeout=90_000,
+            )
+
+            shown = reach_results(page, popups, patient=True)
+            body_text, rows, name_hit = read_page(shown)
+            state = classify(body_text, rows, name_hit)
+            log(f"順路A の結果: {state}")
+            result = (body_text, rows, name_hit, state, shown.url)
+
+            # --- 順路B：うまくいかなかったときの予備（直リンクを開く） ---
+            if state == "error":
+                log(f"順路B を試します: {TARGET_URL}")
+                popups.clear()
+                page2 = context.new_page()
+                page2.set_default_timeout(60_000)
+                page2.goto(
+                    TARGET_URL, referer=PROPERTY_PAGE,
+                    wait_until="domcontentloaded", timeout=90_000,
+                )
+                shown = reach_results(page2, popups, patient=False)
+                body_text, rows, name_hit = read_page(shown)
+                state = classify(body_text, rows, name_hit)
+                log(f"順路B の結果: {state}")
+                result = (body_text, rows, name_hit, state, shown.url)
+
+        except Exception as e:  # noqa: BLE001
+            log(f"ページの取得中にエラーが起きました: {e}")
+
+        save_debug(shown, result[0])
         context.close()
         browser.close()
 
-    return body_text, rows, name_hit, state, final_url
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -494,7 +520,7 @@ def is_highlight(room: dict) -> bool:
     本命条件（既定：D棟 / 4階 / 3LDK）に当てはまるか。
     ・はっきり違う項目が1つでもあれば False
     ・ページ上で読み取れなかった項目（—）は "違うとは言い切れない" として見逃す
-    ・1つも照合できなかった場合は False（=🎯マークは付けないが通知自体はされる）
+    ・1つも照合できなかった場合は False（🎯は付かないが通知自体はされる）
     """
     matched = False
     pairs = [
@@ -528,11 +554,6 @@ def main() -> int:
     state = load_state()
     today = f"{now_jst():%Y-%m-%d}"
 
-    # アクセス時刻を毎回わずかにずらす（機械的な等間隔アクセスを避けるため）
-    jitter = random.randint(0, 45)
-    log(f"{jitter} 秒待ってからアクセスします")
-    time.sleep(jitter)
-
     def record_failure(reason: str) -> int:
         """取得できなかったときの共通処理。前回の掲載記録は消さずに残す。"""
         state["fail_streak"] = int(state.get("fail_streak", 0)) + 1
@@ -548,6 +569,11 @@ def main() -> int:
         state["date"] = today
         save_state(state)
         return 0
+
+    # アクセス時刻を毎回わずかにずらす（機械的な等間隔アクセスを避けるため）
+    jitter = random.randint(0, 45)
+    log(f"{jitter} 秒待ってからアクセスします")
+    time.sleep(jitter)
 
     try:
         body_text, rows, name_hit, page_state, final_url = fetch_page()
@@ -594,12 +620,12 @@ def main() -> int:
         lines = "\n".join(f"・{format_room(r)}" for r in new_rooms)
         content = (
             f"{headline}\n{lines}\n\n"
-            f"▼ すぐ確認する（JKKねっと）\n{TARGET_URL}\n"
-            "※先着順です。ログインして申込へお進みください。"
+            f"▼ すぐ確認する（JKK公式ページ）\n{PROPERTY_PAGE}\n"
+            "※先着順です。ページ下部の「最新の空室状況を確認する」から申込へお進みください。"
         )
         embeds = [{
             "title": f"{BUILDING} あき家情報（{len(new_rooms)}件）",
-            "url": TARGET_URL,
+            "url": PROPERTY_PAGE,
             "color": 0xE8453C if has_target else 0x3BA55D,
             "description": lines[:3900],
             "footer": {"text": f"検知時刻 {now_jst():%Y-%m-%d %H:%M} JST"},
