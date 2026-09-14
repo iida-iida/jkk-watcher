@@ -1,0 +1,84 @@
+name: JKK あき家ウォッチャー
+
+on:
+  schedule:
+    # JKKねっとの更新は「月〜土の9:30〜17:00」に行われるため、その時間帯だけ回します。
+    # GitHub Actions の時刻指定は UTC です。JST = UTC + 9時間。
+    #   UTC 0時〜8時 = JST 9時〜17時台 / 曜日 1-6 = 月曜〜土曜
+    - cron: "*/10 0-8 * * 1-6"   # 10分おき。5分おきにしたいときは */5 に変更
+  workflow_dispatch:             # 手動実行ボタンを GitHub の画面に出す
+
+permissions:
+  contents: write              # state.json をリポジトリに書き戻すために必要
+
+concurrency:
+  group: jkk-watcher           # 前の実行が終わる前に次が走らないようにする
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: Python を用意
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: ブラウザのキャッシュを使う（2回目以降を高速化）
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+
+      - name: ライブラリをインストール
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Chromium をインストール
+        run: python -m playwright install --with-deps chromium
+
+      - name: 監視スクリプトを実行
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TARGET_BUILDING: コーシャハイム久我山
+          TARGET_BUILDING_KANA: コーシャハイムクガヤマ
+          HIGHLIGHT_TOU: "D"
+          HIGHLIGHT_FLOOR: "4"
+          HIGHLIGHT_MADORI: "3LDK"
+          STRICT_MODE: "false"          # true にすると本命条件の部屋だけ通知
+          SEND_DAILY_HEARTBEAT: "false" # true にすると1日1回「稼働中」を通知
+        run: python main.py
+
+      - name: 画面キャプチャを保存（手動実行時・失敗時のみ）
+        if: failure() || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-${{ github.run_number }}
+          path: debug/
+          retention-days: 5
+          if-no-files-found: ignore
+
+      - name: 通知済みリストを保存
+        if: always()
+        run: |
+          if [ ! -f state.json ]; then
+            echo "state.json がまだ作られていないため、保存をスキップします。"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          if git diff --staged --quiet; then
+            echo "変更なし。コミットは不要です。"
+          else
+            git commit -m "状態を更新 [skip ci]"
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            git push
+          fi
