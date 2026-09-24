@@ -544,11 +544,12 @@ def format_room(room: dict) -> str:
 # 6. メイン処理
 # ---------------------------------------------------------------------------
 
-def main() -> int:
+def check_once() -> None:
+    """1回ぶんの確認。ページを見て、新着があれば通知し、状態を保存する。"""
     state = load_state()
     today = f"{now_jst():%Y-%m-%d}"
 
-    def record_failure(reason: str) -> int:
+    def record_failure(reason: str) -> None:
         """取得できなかったときの共通処理。前回の掲載記録は消さずに残す。"""
         state["fail_streak"] = int(state.get("fail_streak", 0)) + 1
         log(f"取得に失敗しました（連続 {state['fail_streak']} 回目）: {reason}")
@@ -562,17 +563,12 @@ def main() -> int:
             )
         state["date"] = today
         save_state(state)
-        return 0
-
-    # アクセス時刻を毎回わずかにずらす（機械的な等間隔アクセスを避けるため）
-    jitter = random.randint(0, 45)
-    log(f"{jitter} 秒待ってからアクセスします")
-    time.sleep(jitter)
 
     try:
         body_text, rows, name_hit, page_state, final_url = fetch_page()
     except Exception as e:  # noqa: BLE001
-        return record_failure(str(e))
+        record_failure(str(e))
+        return
 
     log(
         f"画面の種類: {page_state} / 抽出した行数: {len(rows)} / "
@@ -582,7 +578,8 @@ def main() -> int:
     # 見慣れない画面＝故障の可能性。"あき家ゼロ" と混同しないよう失敗として扱う
     if page_state == "error":
         head = normalize(body_text)[:200] or "（本文が空でした）"
-        return record_failure(f"想定外の画面が返りました: {head}")
+        record_failure(f"想定外の画面が返りました: {head}")
+        return
 
     state["fail_streak"] = 0
 
@@ -645,6 +642,60 @@ def main() -> int:
     state["active"] = current
     state["date"] = today
     save_state(state)
+
+
+# ---------------------------------------------------------------------------
+# 7. 見張りループ
+# ---------------------------------------------------------------------------
+# GitHub Actions の「10分おきに起動して」という指定は、実際にはほとんど守られない
+# （実測で5時間に1回程度まで間引かれた）。そこで発想を変え、
+# 「1回起動したら、そのジョブの中で自分で数時間見張り続ける」方式にする。
+# 一度ジョブが始まれば、その中の待ち時間は正確に効く。
+
+LOOP_MINUTES = int(os.getenv("LOOP_MINUTES", "300"))            # 1回の起動で見張る時間
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL_MINUTES", "8"))  # 確認の間隔
+ACTIVE_START_HOUR = int(os.getenv("ACTIVE_START_HOUR", "9"))    # 見張り開始時刻（JST）
+ACTIVE_END_HOUR = int(os.getenv("ACTIVE_END_HOUR", "18"))       # 見張り終了時刻（JST）
+
+
+def within_active_hours(now: datetime.datetime) -> bool:
+    """JKKねっとが更新される時間帯（月〜土の日中）かどうか。"""
+    if now.weekday() == 6:  # 日曜はJKK側が更新しない
+        return False
+    return ACTIVE_START_HOUR <= now.hour < ACTIVE_END_HOUR
+
+
+def main() -> int:
+    deadline = time.time() + LOOP_MINUTES * 60
+    count = 0
+
+    log(
+        f"見張りを開始します（最長 {LOOP_MINUTES} 分 / 約 {CHECK_INTERVAL} 分おき / "
+        f"JST {ACTIVE_START_HOUR}時〜{ACTIVE_END_HOUR}時・月〜土）"
+    )
+
+    while True:
+        now = now_jst()
+        if not within_active_hours(now):
+            log(f"JKKの更新時間帯の外（{now:%A %H:%M}）なので、ここで終了します")
+            break
+
+        count += 1
+        log(f"───── {count} 回目の確認 ─────")
+        try:
+            check_once()
+        except Exception as e:  # noqa: BLE001
+            log(f"確認中に想定外のエラーが起きました（続行します）: {e}")
+
+        # 次の確認まで待つ。毎回わずかにずらして機械的な等間隔アクセスを避ける
+        wait = CHECK_INTERVAL * 60 + random.randint(0, 60)
+        if time.time() + wait > deadline:
+            log("この起動での見張り時間が終わりました")
+            break
+        log(f"次の確認まで {wait // 60} 分待ちます")
+        time.sleep(wait)
+
+    log(f"見張りを終了します。合計 {count} 回確認しました")
     return 0
 
 
