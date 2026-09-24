@@ -2,10 +2,13 @@ name: JKK あき家ウォッチャー
 
 on:
   schedule:
-    # JKKねっとの更新は「月〜土の9:30〜17:00」に行われるため、その時間帯だけ回します。
+    # 【重要】GitHubは「10分おき」のような細かい指定をほとんど守ってくれません。
+    # （実測では5時間に1回まで間引かれました）
+    # そこで起動の指示は30分おきにとどめ、実際の見張りは main.py の中の
+    # ループで行います。一度ジョブが始まれば、その中の待ち時間は正確に効きます。
     # GitHub Actions の時刻指定は UTC です。JST = UTC + 9時間。
     #   UTC 0時〜8時 = JST 9時〜17時台 / 曜日 1-6 = 月曜〜土曜
-    - cron: "*/10 0-8 * * 1-6"   # 10分おき。5分おきにしたいときは */5 に変更
+    - cron: "0,30 0-8 * * 1-6"
   workflow_dispatch:             # 手動実行ボタンを GitHub の画面に出す
 
 permissions:
@@ -18,7 +21,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 340   # 1回の起動で最長5時間見張るため長めに取る
 
     steps:
       - name: リポジトリを取得
@@ -56,6 +59,11 @@ jobs:
           HIGHLIGHT_MADORI: "3LDK"
           STRICT_MODE: "false"          # true にすると本命条件の部屋だけ通知
           SEND_DAILY_HEARTBEAT: "false" # true にすると1日1回「稼働中」を通知
+          # ↓ 見張りループの設定
+          LOOP_MINUTES: "300"            # 1回の起動で見張り続ける時間（分）最大340まで
+          CHECK_INTERVAL_MINUTES: "8"    # 何分おきにJKKを確認するか
+          ACTIVE_START_HOUR: "9"         # 見張り開始（JST）
+          ACTIVE_END_HOUR: "18"          # 見張り終了（JST）
         run: python main.py
 
       - name: 画面キャプチャを保存（手動実行時・失敗時のみ）
