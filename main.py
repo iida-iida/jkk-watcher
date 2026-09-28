@@ -54,6 +54,8 @@ BUILDING_KANA = os.getenv("TARGET_BUILDING_KANA", "コーシャハイムクガ�
 HIGHLIGHT_TOU = os.getenv("HIGHLIGHT_TOU", "D").strip().upper()
 HIGHLIGHT_FLOOR = os.getenv("HIGHLIGHT_FLOOR", "4").strip()
 HIGHLIGHT_MADORI = os.getenv("HIGHLIGHT_MADORI", "3LDK").strip().upper()
+# 検索結果の一覧には棟や階が出ないため、面積が本命を見分ける手がかりになる
+HIGHLIGHT_AREA = os.getenv("HIGHLIGHT_AREA", "63.3").strip()
 
 STRICT_MODE = os.getenv("STRICT_MODE", "false").lower() == "true"
 SEND_DAILY_HEARTBEAT = os.getenv("SEND_DAILY_HEARTBEAT", "false").lower() == "true"
@@ -189,11 +191,25 @@ def collect_text(page) -> str:
     return "\n".join(chunks)
 
 
+# ── あき家の行を見分けるためのパターン ──────────────────────────
+# JKKの検索結果は「床面積[m2]」「家賃[円]」のように単位が列見出しにあり、
+# セルの中は 66.18 / 246,200 のような裸の数字。単位は行に入っていない。
+# そのため「円」「㎡」を必須にすると1行も拾えない（実際にそうなっていた）。
+MONEY_RE = re.compile(r"[0-9]{1,3}(?:,[0-9]{3})+")                 # 246,200 など
+AREA_RE = re.compile(r"[0-9]{1,3}\.[0-9]{1,2}")                    # 66.18 など
+MADORI_RE = re.compile(r"[1-9]\s?(?:S?LDK|S?LD|S?DK|S?LK|S?K|R)(?![A-Za-z])|ワンルーム")
+RANGE_RE = "\\s*[~～〜-]\\s*"                                       # 65.27～75.68 の区切り
+
+
+def looks_like_room(text: str) -> bool:
+    """この行は「あき家1件ぶん」か。金額があり、かつ間取りか面積が読める行。"""
+    if not MONEY_RE.search(text):
+        return False
+    return bool(MADORI_RE.search(text) or AREA_RE.search(text))
+
+
 def collect_rows(page) -> list:
-    """
-    表（<tr>）の中から「あき家1件ぶん」に見える行だけを拾う。
-    判定条件：家賃（◯◯,◯◯◯円）と 面積（◯◯.◯㎡）の両方が入っている行。
-    """
+    """表（<tr>）の中から「あき家1件ぶん」に見える行だけを拾う。"""
     raw_rows = []
     for frame in page.frames:
         try:
@@ -207,9 +223,7 @@ def collect_rows(page) -> list:
                 continue
             if not text:
                 continue
-            has_rent = re.search(r"[0-9]{1,3}(?:,[0-9]{3})+\s*円", text)
-            has_area = re.search(r"[0-9]+\.[0-9]+\s*(?:㎡|m2|平方)", text)
-            if has_rent and has_area:
+            if looks_like_room(text):
                 raw_rows.append(text)
 
     # 入れ子テーブル対策：短い行（＝いちばん内側の行）を優先して残す
@@ -374,10 +388,12 @@ def classify(body_text: str, rows: list, name_hit: bool) -> str:
     ページの種類を判定する。
       "results" … あき家が載っている
       "empty"   … 正常に表示されたが、あき家は無い
+      "suspect" … 住宅名は出ているのに部屋を読み取れない（＝見逃しの疑い）
       "error"   … エラー画面 or 見慣れない画面（＝故障の可能性）
 
-    "empty" と "error" をきちんと分けるのが肝。ここを混同すると、
-    スクリプトが壊れていても「あき家なし」に見えてしまい永久に気づけない。
+    ここを雑にすると「壊れていても空室なしに見える」状態になる。
+    実際、以前は住宅名が出ていても "empty" と報告していたため、
+    掲載が始まっていても気づけない穴があった。それが "suspect"。
     """
     if rows:
         return "results"
@@ -388,10 +404,34 @@ def classify(body_text: str, rows: list, name_hit: bool) -> str:
     if any(marker in body_text for marker in EMPTY_MARKERS):
         return "empty"
     if name_hit:
-        return "empty"
+        # 住宅名がページにあるのに行を1つも拾えていない。
+        # 表の形が変わったか、掲載が始まっているのに読めていない可能性がある。
+        return "suspect"
     if "あき家" in body_text and ("検索" in body_text or "募集" in body_text):
         return "empty"
     return "error"
+
+
+# ---------------------------------------------------------------------------
+# 観測の記録（あとから「あの日、出ていたのか」を追えるようにする）
+# ---------------------------------------------------------------------------
+
+HISTORY_PATH = pathlib.Path("history.jsonl")
+HISTORY_MAX_LINES = 3000
+
+
+def append_history(entry: dict) -> None:
+    """1回の確認ごとに1行ずつ記録を残す。古い行は捨てて肥大化を防ぐ。"""
+    try:
+        lines = []
+        if HISTORY_PATH.exists():
+            lines = HISTORY_PATH.read_text(encoding="utf-8").splitlines()
+        lines.append(json.dumps(entry, ensure_ascii=False))
+        if len(lines) > HISTORY_MAX_LINES:
+            lines = lines[-HISTORY_MAX_LINES:]
+        HISTORY_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        log(f"履歴の保存に失敗（無視して続行）: {e}")
 
 
 def save_debug(page, body_text: str) -> None:
@@ -488,39 +528,72 @@ def fetch_page():
 # 5. 拾った行を「部屋の情報」に整える
 # ---------------------------------------------------------------------------
 
+def pick_value(values: list, text: str, unit: str) -> str:
+    """
+    数値を1つ選ぶ。「65.27～75.68」のような範囲表記ならまとめて返す。
+    """
+    if not values:
+        return "—"
+    head = values[0]
+    if len(values) >= 2:
+        pattern = re.escape(head) + RANGE_RE + re.escape(values[1])
+        if re.search(pattern, text):
+            return f"{head}〜{values[1]}{unit}"
+    return f"{head}{unit}"
+
+
 def parse_room(text: str) -> dict:
-    rent = re.search(r"([0-9]{1,3}(?:,[0-9]{3})+)\s*円", text)
-    area = re.search(r"([0-9]+\.[0-9]+)\s*(?:㎡|m2|平方)", text)
-    madori = re.search(r"([1-9])\s?([SLDKsldk]{1,4})", text)
+    # 家賃・共益費の順で並ぶので、先頭が家賃
+    monies = MONEY_RE.findall(text)
+    areas = AREA_RE.findall(text)
+    madori = MADORI_RE.search(text)
     floor = re.search(r"([0-9]{1,2})\s*階", text)
-    tou = re.search(r"([A-Za-z0-9])\s*号?棟", text)
+    tou = re.search(r"([A-Za-z0-9])\s*号棟", text)
+    # 優先種別（申し込めるかどうかに直結するので拾っておく）
+    yusen = re.search(r"(子育[・･]?高齢|子育て世帯等|高齢|応援|一般)", text)
 
     room = {
         # 行の文字列そのものを指紋（ID）にする。1文字でも違えば別の部屋として扱う
         "id": hashlib.sha1(text.encode("utf-8")).hexdigest()[:12],
-        "raw": text[:400],
-        "rent": rent.group(1) + "円" if rent else "—",
-        "area": area.group(1) + "㎡" if area else "—",
-        "madori": (madori.group(1) + madori.group(2).upper()) if madori else "—",
+        "raw": text[:300],
+        "rent": pick_value(monies, text, "円"),
+        "area": pick_value(areas, text, "㎡"),
+        "madori": madori.group(0).replace(" ", "").upper() if madori else "—",
         "floor": floor.group(1) + "階" if floor else "—",
         "tou": tou.group(1).upper() + "棟" if tou else "—",
+        "yusen": yusen.group(1) if yusen else "—",
     }
     room["is_target"] = is_highlight(room)
     return room
 
 
+def area_matches(want: str, got: str) -> bool:
+    """面積が本命と一致するか（±0.5㎡の幅を持たせる）。範囲表記にも対応。"""
+    try:
+        target = float(want)
+    except ValueError:
+        return False
+    for value in re.findall(r"[0-9]{1,3}\.[0-9]{1,2}", got):
+        if abs(float(value) - target) <= 0.5:
+            return True
+    return False
+
+
 def is_highlight(room: dict) -> bool:
     """
-    本命条件（既定：D棟 / 4階 / 3LDK）に当てはまるか。
+    本命条件（既定：D棟 / 4階 / 3LDK / 63.3㎡）に当てはまるか。
     ・はっきり違う項目が1つでもあれば False
     ・ページ上で読み取れなかった項目（—）は "違うとは言い切れない" として見逃す
     ・1つも照合できなかった場合は False（🎯は付かないが通知自体はされる）
+
+    JKKの検索結果一覧には棟・階が出ないため、実際に効くのは間取りと面積。
     """
     matched = False
     pairs = [
         (HIGHLIGHT_TOU, room["tou"], lambda want, got: got.startswith(want)),
         (HIGHLIGHT_FLOOR, room["floor"], lambda want, got: got == f"{want}階"),
         (HIGHLIGHT_MADORI, room["madori"], lambda want, got: got == want),
+        (HIGHLIGHT_AREA, room["area"], area_matches),
     ]
     for want, got, ok in pairs:
         if not want or got == "—":
@@ -534,10 +607,15 @@ def is_highlight(room: dict) -> bool:
 
 def format_room(room: dict) -> str:
     mark = "🎯 " if room["is_target"] else ""
-    return (
-        f"{mark}{room['tou']} / {room['floor']} / {room['madori']} / "
-        f"{room['area']} / **{room['rent']}**"
-    )
+    parts = [room["madori"], room["area"], f"**{room['rent']}**"]
+    # 一覧に出ていれば棟・階も添える
+    for extra in (room["tou"], room["floor"]):
+        if extra != "—":
+            parts.insert(0, extra)
+    line = f"{mark}" + " / ".join(parts)
+    if room["yusen"] != "—":
+        line += f"　[{room['yusen']}]"
+    return line
 
 
 # ---------------------------------------------------------------------------
@@ -553,8 +631,9 @@ def check_once() -> None:
         """取得できなかったときの共通処理。前回の掲載記録は消さずに残す。"""
         state["fail_streak"] = int(state.get("fail_streak", 0)) + 1
         log(f"取得に失敗しました（連続 {state['fail_streak']} 回目）: {reason}")
-        # 10分間隔で6回＝約1時間続けて失敗したときだけ、1度お知らせする
-        if state["fail_streak"] == 6:
+        # 約1時間続けて失敗したら知らせる。その後も直らなければ約5時間おきに再送
+        streak = state["fail_streak"]
+        if streak == 6 or (streak > 6 and streak % 36 == 0):
             post_discord(
                 "⚠️ JKKねっとの監視が1時間ほど連続で失敗しています。\n"
                 "サイトのメンテナンス中か、ページ構成が変わった可能性があります。\n"
@@ -575,13 +654,44 @@ def check_once() -> None:
         f"住宅名ヒット: {name_hit} / 最終URL: {final_url}"
     )
 
+    # 毎回の観測を記録に残す（あとから経緯を追えるようにするため）
+    text_hash = hashlib.sha1(normalize(body_text).encode("utf-8")).hexdigest()[:8]
+    append_history({
+        "t": f"{now_jst():%Y-%m-%d %H:%M:%S}",
+        "state": page_state,
+        "rows": len(rows),
+        "name_hit": name_hit,
+        "hash": text_hash,
+        "sample": [normalize(r)[:120] for r in rows[:3]],
+    })
+
     # 見慣れない画面＝故障の可能性。"あき家ゼロ" と混同しないよう失敗として扱う
     if page_state == "error":
         head = normalize(body_text)[:200] or "（本文が空でした）"
         record_failure(f"想定外の画面が返りました: {head}")
         return
 
+    # 住宅名は出ているのに部屋を読み取れない＝見逃しの疑い。
+    # 黙って「空室なし」にせず、必ず知らせて人間に確認してもらう。
+    if page_state == "suspect":
+        log("⚠ 住宅名はページにあるのに部屋を読み取れませんでした")
+        log(f"ページ本文の冒頭: {normalize(body_text)[:300]}")
+        if state.get("last_state") != "suspect":
+            post_discord(
+                f"⚠️ **確認してください**「{BUILDING}」がJKKの画面に出ていますが、"
+                "部屋の詳細を読み取れませんでした。\n"
+                "**掲載が始まっている可能性があります。**\n\n"
+                f"▼ 今すぐ確認\n{PROPERTY_PAGE}\n"
+                "（JKK側の表示形式が変わった場合もこの通知が出ます）"
+            )
+        state["last_state"] = "suspect"
+        state["date"] = today
+        state["fail_streak"] = 0
+        save_state(state)
+        return
+
     state["fail_streak"] = 0
+    state["last_state"] = page_state
 
     if len(rows) > 30:
         # 想定より多い＝住宅名で絞り込めていない可能性。名前を含む行だけに限定する
