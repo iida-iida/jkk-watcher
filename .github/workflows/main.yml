@@ -57,6 +57,8 @@ jobs:
           HIGHLIGHT_TOU: "D"
           HIGHLIGHT_FLOOR: "4"
           HIGHLIGHT_MADORI: "3LDK"
+          # 検索結果の一覧には棟・階が出ないため、面積が本命を見分ける決め手になる
+          HIGHLIGHT_AREA: "63.3"
           STRICT_MODE: "false"          # true にすると本命条件の部屋だけ通知
           SEND_DAILY_HEARTBEAT: "false" # true にすると1日1回「稼働中」を通知
           # ↓ 見張りループの設定
@@ -75,7 +77,7 @@ jobs:
           retention-days: 5
           if-no-files-found: ignore
 
-      - name: 通知済みリストを保存
+      - name: 通知済みリストと観測履歴を保存
         if: always()
         run: |
           if [ ! -f state.json ]; then
@@ -84,7 +86,7 @@ jobs:
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state.json
+          git add state.json history.jsonl 2>/dev/null || git add state.json
           if git diff --staged --quiet; then
             echo "変更なし。コミットは不要です。"
           else
