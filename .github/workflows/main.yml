@@ -78,6 +78,12 @@ jobs:
           retention-days: 5
           if-no-files-found: ignore
 
+      # 【2026-09-29 修正】記録の保存で競合しても、記録を失わないようにした。
+      # 以前は、別の実行の保存と重なると git が止まり、その実行の記録が
+      # まるごと消えていた（9/28 の実行 #42）。
+      # 今は「最新の状態を取り直す → 自分の記録を重ねる → 保存」を最大3回試す。
+      #   state.json    … この実行の内容で保存する
+      #   history.jsonl … 保存済みの行と今回の行を合わせ、重複を除いて時刻順に並べる
       - name: 通知済みリストと観測履歴を保存
         if: always()
         run: |
@@ -87,11 +93,35 @@ jobs:
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state.json history.jsonl 2>/dev/null || git add state.json
-          if git diff --staged --quiet; then
-            echo "変更なし。コミットは不要です。"
-          else
-            git commit -m "状態を更新 [skip ci]"
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
-            git push
-          fi
+          KEEP=/tmp/keep-$$
+          mkdir -p "$KEEP"
+          cp -f state.json "$KEEP/state.json"
+          if [ -f history.jsonl ]; then cp -f history.jsonl "$KEEP/history.jsonl"; else : > "$KEEP/history.jsonl"; fi
+          for i in 1 2 3; do
+            if ! git fetch -q origin main; then
+              echo "最新の記録を取得できませんでした。少し待って再試行します（${i}/3）"
+              sleep 5
+              continue
+            fi
+            git reset -q --hard origin/main
+            cp -f "$KEEP/state.json" state.json
+            touch history.jsonl
+            cat history.jsonl "$KEEP/history.jsonl" | grep -v '^[[:space:]]*$' | LC_ALL=C sort -u | tail -n 3000 > "$KEEP/merged.jsonl" || true
+            cp -f "$KEEP/merged.jsonl" history.jsonl
+            if [ ! -s history.jsonl ]; then rm -f history.jsonl; fi
+            git add state.json
+            if [ -f history.jsonl ]; then git add history.jsonl; fi
+            if git diff --staged --quiet; then
+              echo "変更なし。コミットは不要です。"
+              exit 0
+            fi
+            git commit -q -m "状態を更新 [skip ci]"
+            if git push -q origin HEAD:main; then
+              echo "保存できました（${i}回目）"
+              exit 0
+            fi
+            echo "保存に失敗。少し待って再試行します（${i}/3）"
+            sleep 5
+          done
+          echo "3回試しても保存できませんでした"
+          exit 1
