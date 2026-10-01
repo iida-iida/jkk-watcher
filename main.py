@@ -36,8 +36,11 @@ import os
 import pathlib
 import random
 import re
+import shutil
+import subprocess
 import sys
 import time
+import unicodedata
 
 import requests
 from playwright.sync_api import sync_playwright
@@ -111,6 +114,15 @@ def normalize(text: str) -> str:
     """全角スペースや改行をならして、比較しやすい1行の文字列にする。"""
     text = text.replace("\u3000", " ")
     return re.sub(r"\s+", " ", text).strip()
+
+
+def fold(text: str) -> str:
+    """
+    全角の英数字・記号を半角にそろえる（例：３ＬＤＫ → 3LDK、４１．４９ → 41.49）。
+    部屋の項目を読み取るときだけ使う。部屋のID（指紋）は元の文字列のまま作るので、
+    この処理を足しても、通知済みの部屋が「新着」扱いに戻ることはない。
+    """
+    return unicodedata.normalize("NFKC", text)
 
 
 def load_state() -> dict:
@@ -203,6 +215,7 @@ RANGE_RE = "\\s*[~～〜-]\\s*"                                       # 65.27～
 
 def looks_like_room(text: str) -> bool:
     """この行は「あき家1件ぶん」か。金額があり、かつ間取りか面積が読める行。"""
+    text = fold(text)
     if not MONEY_RE.search(text):
         return False
     return bool(MADORI_RE.search(text) or AREA_RE.search(text))
@@ -543,21 +556,23 @@ def pick_value(values: list, text: str, unit: str) -> str:
 
 
 def parse_room(text: str) -> dict:
+    # 読み取りは全角を半角にそろえた文字列で行う（IDは元の文字列で作る）
+    t = fold(text)
     # 家賃・共益費の順で並ぶので、先頭が家賃
-    monies = MONEY_RE.findall(text)
-    areas = AREA_RE.findall(text)
-    madori = MADORI_RE.search(text)
-    floor = re.search(r"([0-9]{1,2})\s*階", text)
-    tou = re.search(r"([A-Za-z0-9])\s*号棟", text)
+    monies = MONEY_RE.findall(t)
+    areas = AREA_RE.findall(t)
+    madori = MADORI_RE.search(t)
+    floor = re.search(r"([0-9]{1,2})\s*階", t)
+    tou = re.search(r"([A-Za-z0-9])\s*号棟", t)
     # 優先種別（申し込めるかどうかに直結するので拾っておく）
-    yusen = re.search(r"(子育[・･]?高齢|子育て世帯等|高齢|応援|一般)", text)
+    yusen = re.search(r"(子育[・･]?高齢|子育て世帯等|高齢|応援|一般)", t)
 
     room = {
         # 行の文字列そのものを指紋（ID）にする。1文字でも違えば別の部屋として扱う
         "id": hashlib.sha1(text.encode("utf-8")).hexdigest()[:12],
         "raw": text[:300],
-        "rent": pick_value(monies, text, "円"),
-        "area": pick_value(areas, text, "㎡"),
+        "rent": pick_value(monies, t, "円"),
+        "area": pick_value(areas, t, "㎡"),
         "madori": madori.group(0).replace(" ", "").upper() if madori else "—",
         "floor": floor.group(1) + "階" if floor else "—",
         "tou": tou.group(1).upper() + "棟" if tou else "—",
@@ -622,6 +637,71 @@ def format_room(room: dict) -> str:
 # 6. メイン処理
 # ---------------------------------------------------------------------------
 
+def keep_debug_snapshot(label: str) -> None:
+    """
+    いまの画面の記録（debug/page.*）を、上書きされない名前で残しておく。
+    debug/ は最後の1回分しか残らないので、新着を検知した瞬間の画面を別に取っておく。
+    実行の終了時に Artifact（debug-◯）としてまとめて保存される。
+    """
+    stamp = f"{now_jst():%Y%m%d-%H%M}"
+    for ext in ("txt", "html", "png"):
+        src = DEBUG_DIR / f"page.{ext}"
+        if src.exists():
+            try:
+                shutil.copy(src, DEBUG_DIR / f"{label}-{stamp}.{ext}")
+            except Exception as e:  # noqa: BLE001
+                log(f"画面記録のコピーに失敗（無視して続行）: {e}")
+
+
+def push_state_now(reason: str) -> None:
+    """
+    state.json と history.jsonl を、いますぐリポジトリに保存する。
+    やり方は main.yml の最後の保存ステップと同じ（最新を取り直す → 自分の記録を重ねる
+    → 保存。最大3回）。GitHub Actions の上でだけ動き、手元で試すときは何もしない。
+    """
+    if os.getenv("GITHUB_ACTIONS") != "true":
+        log("GitHub Actions の外なので、途中保存はスキップします")
+        return
+
+    def git(*args):
+        return subprocess.run(["git", *args], capture_output=True, text=True)
+
+    try:
+        keep_state = STATE_PATH.read_text(encoding="utf-8")
+        keep_hist = HISTORY_PATH.read_text(encoding="utf-8") if HISTORY_PATH.exists() else ""
+        for i in range(1, 4):
+            if git("fetch", "-q", "origin", "main").returncode != 0:
+                log(f"途中保存：最新の記録を取得できませんでした（{i}/3）")
+                time.sleep(5)
+                continue
+            git("reset", "-q", "--hard", "origin/main")
+            STATE_PATH.write_text(keep_state, encoding="utf-8")
+            saved = HISTORY_PATH.read_text(encoding="utf-8") if HISTORY_PATH.exists() else ""
+            merged = sorted({line for line in (saved + "\n" + keep_hist).splitlines() if line.strip()})
+            merged = merged[-HISTORY_MAX_LINES:]
+            if merged:
+                HISTORY_PATH.write_text("\n".join(merged) + "\n", encoding="utf-8")
+            git("add", "state.json")
+            if HISTORY_PATH.exists():
+                git("add", "history.jsonl")
+            if git("diff", "--staged", "--quiet").returncode == 0:
+                log("途中保存：変更なし")
+                return
+            git(
+                "-c", "user.name=github-actions[bot]",
+                "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+                "commit", "-q", "-m", "状態を更新（途中保存）[skip ci]",
+            )
+            if git("push", "-q", "origin", "HEAD:main").returncode == 0:
+                log(f"途中保存できました（{reason} / {i}回目）")
+                return
+            log(f"途中保存：保存に失敗。少し待って再試行します（{i}/3）")
+            time.sleep(5)
+        log("途中保存を3回試しましたが、できませんでした（終了時にもう一度保存します）")
+    except Exception as e:  # noqa: BLE001
+        log(f"途中保存でエラー（無視して続行。終了時にもう一度保存します）: {e}")
+
+
 def check_once() -> None:
     """1回ぶんの確認。ページを見て、新着があれば通知し、状態を保存する。"""
     state = load_state()
@@ -662,7 +742,7 @@ def check_once() -> None:
         "rows": len(rows),
         "name_hit": name_hit,
         "hash": text_hash,
-        "sample": [normalize(r)[:120] for r in rows[:3]],
+        "sample": [normalize(r)[:300] for r in rows[:3]],
     })
 
     # 見慣れない画面＝故障の可能性。"あき家ゼロ" と混同しないよう失敗として扱う
@@ -684,10 +764,14 @@ def check_once() -> None:
                 f"▼ 今すぐ確認\n{PROPERTY_PAGE}\n"
                 "（JKK側の表示形式が変わった場合もこの通知が出ます）"
             )
+        notified = state.get("last_state") != "suspect"
         state["last_state"] = "suspect"
         state["date"] = today
         state["fail_streak"] = 0
         save_state(state)
+        if notified:
+            keep_debug_snapshot("suspect")
+            push_state_now("要確認の通知を送った")
         return
 
     state["fail_streak"] = 0
@@ -719,6 +803,14 @@ def check_once() -> None:
             else f"🏠 **「{BUILDING}」にあき家が出ました**"
         )
         lines = "\n".join(f"・{format_room(r)}" for r in new_rooms)
+        # 読み取れない項目（—）がある部屋は、JKKの画面から拾った行をそのまま添える。
+        # 原因調査の手がかりになり、通知を見た人の判断材料にもなる。
+        unclear = [r for r in new_rooms if "—" in (r["madori"], r["yusen"], r["area"], r["rent"])]
+        raw_note = ""
+        if unclear:
+            raw_note = "\n\n**読み取った行（確認用）**\n" + "\n".join(
+                "`" + r["raw"][:200].replace("`", "'") + "`" for r in unclear
+            )
         content = (
             f"{headline}\n{lines}\n\n"
             f"▼ すぐ確認する（JKK公式ページ）\n{PROPERTY_PAGE}\n"
@@ -728,10 +820,12 @@ def check_once() -> None:
             "title": f"{BUILDING} あき家情報（{len(new_rooms)}件）",
             "url": PROPERTY_PAGE,
             "color": 0xE8453C if has_target else 0x3BA55D,
-            "description": lines[:3900],
+            "description": (lines + raw_note)[:3900],
             "footer": {"text": f"検知時刻 {now_jst():%Y-%m-%d %H:%M} JST"},
         }]
         post_discord(content, embeds)
+        for r in unclear:
+            log(f"読み取れない項目がある行: {r['raw']}")
     else:
         log("新着はありません")
 
@@ -752,6 +846,12 @@ def check_once() -> None:
     state["active"] = current
     state["date"] = today
     save_state(state)
+
+    # 新着を通知したら、ジョブの終了を待たずにすぐ記録を保存する。
+    # 途中でジョブが止まっても「通知済み」の記憶が残り、同じ部屋の重複通知を防げる。
+    if new_ids:
+        keep_debug_snapshot("found")
+        push_state_now("新着を通知した")
 
 
 # ---------------------------------------------------------------------------
