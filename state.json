@@ -1,19 +1,7 @@
 {
-  "active": {
-    "c5da6d7d6917": {
-      "area": "—",
-      "floor": "—",
-      "id": "c5da6d7d6917",
-      "is_target": false,
-      "madori": "2LDK",
-      "raw": "E-106 1～ Ｌ９ 注意 ２ＬＤＫ 南 141,100 282,200 7,600 世田谷区北烏山二丁目１０－Ｅ 即入居可",
-      "rent": "141,100円",
-      "tou": "—",
-      "yusen": "—"
-    }
-  },
+  "active": {},
   "date": "2026-10-03",
   "fail_streak": 0,
   "heartbeat_date": "2026-09-14",
-  "last_state": "results"
+  "last_state": "empty"
 }
