@@ -1,7 +1,19 @@
 {
-  "active": {},
-  "date": "2026-10-03",
+  "active": {
+    "5ce9994c3442": {
+      "area": "—",
+      "floor": "—",
+      "id": "5ce9994c3442",
+      "is_target": false,
+      "madori": "2DK",
+      "raw": "C-208 1～ Ｖ１ 注意 ２ＤＫ 南東 119,900 239,800 7,600 世田谷区北烏山二丁目１０－Ｃ 即入居可",
+      "rent": "119,900円",
+      "tou": "—",
+      "yusen": "—"
+    }
+  },
+  "date": "2026-10-05",
   "fail_streak": 0,
   "heartbeat_date": "2026-09-14",
-  "last_state": "empty"
+  "last_state": "results"
 }
