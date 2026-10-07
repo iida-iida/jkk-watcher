@@ -1,7 +1,19 @@
 {
-  "active": {},
+  "active": {
+    "9bb55993be4c": {
+      "area": "—",
+      "floor": "—",
+      "id": "9bb55993be4c",
+      "is_target": false,
+      "madori": "2K",
+      "raw": "B-102 1～ Ｃ１ 注意 ２Ｋ 南西 107,900 215,800 7,600 世田谷区北烏山二丁目１０－Ｂ 即入居可",
+      "rent": "107,900円",
+      "tou": "—",
+      "yusen": "—"
+    }
+  },
   "date": "2026-10-07",
   "fail_streak": 0,
   "heartbeat_date": "2026-09-14",
-  "last_state": "empty"
+  "last_state": "results"
 }
