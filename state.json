@@ -1,19 +1,7 @@
 {
-  "active": {
-    "844e0a10c62c": {
-      "area": "—",
-      "floor": "—",
-      "id": "844e0a10c62c",
-      "is_target": false,
-      "madori": "1LDK",
-      "raw": "C-513 1～ ＡＬ３ 注意 １ＬＤＫ 南東 124,500 249,000 7,600 世田谷区北烏山二丁目１０－Ｃ 即入居可",
-      "rent": "124,500円",
-      "tou": "—",
-      "yusen": "—"
-    }
-  },
+  "active": {},
   "date": "2026-10-15",
   "fail_streak": 0,
   "heartbeat_date": "2026-09-14",
-  "last_state": "results"
+  "last_state": "empty"
 }
