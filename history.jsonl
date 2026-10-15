@@ -814,3 +814,14 @@
 {"t": "2026-10-14 17:34:54", "state": "error", "rows": 0, "name_hit": false, "hash": "da39a3ee", "sample": []}
 {"t": "2026-10-14 17:44:01", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
 {"t": "2026-10-14 17:53:03", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 09:01:35", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 09:10:37", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 09:19:28", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 09:28:39", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 09:37:48", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 09:46:35", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 09:54:56", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 10:03:34", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 10:12:33", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 10:21:42", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-10-15 10:30:14", "state": "results", "rows": 1, "name_hit": true, "hash": "70729df1", "sample": ["C-513 1～ ＡＬ３ 注意 １ＬＤＫ 南東 124,500 249,000 7,600 世田谷区北烏山二丁目１０－Ｃ 即入居可"]}
