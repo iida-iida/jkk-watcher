@@ -57,16 +57,16 @@ jobs:
       - name: 監視スクリプトを実行
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          TARGET_BUILDING: コーシャハイム久我山
-          TARGET_BUILDING_KANA: コーシャハイムクガヤマ
-          # JKKねっとは「URL直接入力」を弾くため、必ず公式ページを経由します
-          TARGET_PROPERTY_PAGE: "https://www.to-kousya.or.jp/chintai/reco/kh_kugayama.html"
-          HIGHLIGHT_TOU: "D"
-          HIGHLIGHT_FLOOR: "4"
-          HIGHLIGHT_MADORI: "3LDK"
-          # 検索結果の一覧には棟・階が出ないため、面積が本命を見分ける決め手になる
-          HIGHLIGHT_AREA: "63.3"
-          STRICT_MODE: "false"          # true にすると本命条件の部屋だけ通知
+          # ↓ 見張る住宅の一覧。1行に1住宅、「表示名 | カタカナ名 | 公式ページURL」の形で書く
+          #   ・住宅を増やすときは1行足す。やめるときはその行を消す
+          #   ・カタカナ名は、公式ページの「最新の空室状況を確認する」リンクから逆算したもの
+          #     （例：玉川田園調布は「チョウフ」ではなく「チヨウフ」で登録されている）
+          #   ・JKKねっとは「URL直接入力」を弾くため、必ず公式ページを経由する
+          WATCH_TARGETS: |
+            コーシャハイム久我山 | コーシャハイムクガヤマ | https://www.to-kousya.or.jp/chintai/reco/kh_kugayama.html
+            トミンハイム玉川田園調布 | トミンハイムタマガワデンエンチヨウフ | https://www.to-kousya.or.jp/chintai/reco/th_tamagawadenenchohu.html
+            カーメスト大蔵の杜 | カーメストオオクラノモリ | https://www.to-kousya.or.jp/chintai/reco/c_okura.html
+          STRICT_MODE: "false"          # 本命条件の部屋だけ通知する設定。本命条件は使っていないので false のまま
           SEND_DAILY_HEARTBEAT: "false" # true にすると1日1回「稼働中」を通知
           # ↓ 見張りループの設定
           LOOP_MINUTES: "300"            # 1回の起動で見張り続ける時間（分）最大340まで
