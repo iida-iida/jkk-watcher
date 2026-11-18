@@ -1,7 +1,11 @@
 {
-  "active": {},
+  "buildings": {
+    "コーシャハイム久我山": {
+      "active": {},
+      "fail_streak": 0,
+      "last_state": "empty"
+    }
+  },
   "date": "2026-11-18",
-  "fail_streak": 0,
-  "heartbeat_date": "2026-09-14",
-  "last_state": "empty"
+  "heartbeat_date": "2026-09-14"
 }
