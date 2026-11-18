@@ -62,9 +62,11 @@ jobs:
           #   ・カタカナ名は、公式ページの「最新の空室状況を確認する」リンクから逆算したもの
           #     （例：玉川田園調布は「チョウフ」ではなく「チヨウフ」で登録されている）
           #   ・JKKねっとは「URL直接入力」を弾くため、必ず公式ページを経由する
+          #   ・行の最後に「| 重要」を付けた住宅は、毎回最初に確認し、@everyone 付きで強く通知し、
+          #     故障も早め（約15分）に知らせる
           WATCH_TARGETS: |
             コーシャハイム久我山 | コーシャハイムクガヤマ | https://www.to-kousya.or.jp/chintai/reco/kh_kugayama.html
-            トミンハイム玉川田園調布 | トミンハイムタマガワデンエンチヨウフ | https://www.to-kousya.or.jp/chintai/reco/th_tamagawadenenchohu.html
+            トミンハイム玉川田園調布 | トミンハイムタマガワデンエンチヨウフ | https://www.to-kousya.or.jp/chintai/reco/th_tamagawadenenchohu.html | 重要
             カーメスト大蔵の杜 | カーメストオオクラノモリ | https://www.to-kousya.or.jp/chintai/reco/c_okura.html
           STRICT_MODE: "false"          # 本命条件の部屋だけ通知する設定。本命条件は使っていないので false のまま
           SEND_DAILY_HEARTBEAT: "false" # true にすると1日1回「稼働中」を通知
