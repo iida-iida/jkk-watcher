@@ -59,6 +59,7 @@ BUILDING_KANA = ""
 PROPERTY_PAGE = ""
 TARGET_URL = ""
 DEBUG_TAG = "page"
+IMPORTANT = False   # いま確認している住宅が「重要」指定かどうか
 
 # 本命マーク🎯の条件。空なら🎯は付かない（通知自体はすべての部屋で届く）
 HIGHLIGHT_TOU = os.getenv("HIGHLIGHT_TOU", "").strip().upper()
@@ -98,8 +99,9 @@ def build_direct_url(kana: str) -> str:
 def load_targets() -> list:
     """
     見張る住宅の一覧を読み込む。WATCH_TARGETS の1行が1住宅。
-      表示名 | カタカナ名 | JKK公式の住宅ページのURL
+      表示名 | カタカナ名 | JKK公式の住宅ページのURL | 重要（任意）
     公式ページは「URL直接入力」扱いを避けるための経由地で、通知のリンク先にも使う。
+    4つ目に「重要」と書いた住宅は、毎回最初に確認し、通知を強くし、故障も早く知らせる。
     """
     targets = []
     for line in os.getenv("WATCH_TARGETS", "").splitlines():
@@ -110,7 +112,9 @@ def load_targets() -> list:
         if len(parts) < 3 or not all(parts[:3]):
             print(f"WATCH_TARGETS の書き方が違う行を飛ばします: {line}", flush=True)
             continue
-        targets.append({"name": parts[0], "kana": parts[1], "page": parts[2]})
+        important = len(parts) >= 4 and parts[3] == "重要"
+        targets.append({"name": parts[0], "kana": parts[1], "page": parts[2],
+                        "important": important})
     if not targets:
         # 以前の版の設定（1住宅だけ）にも対応しておく
         targets.append({
@@ -120,13 +124,17 @@ def load_targets() -> list:
                 "TARGET_PROPERTY_PAGE",
                 "https://www.to-kousya.or.jp/chintai/reco/kh_kugayama.html",
             ).strip(),
+            "important": False,
         })
+    # 「重要」の住宅を先頭に並べる（それ以外の順番は書いたとおりのまま）
+    targets.sort(key=lambda t: not t["important"])
     return targets
 
 
 def use_target(target: dict, number: int) -> None:
     """これから確認する住宅に切り替える。"""
-    global BUILDING, BUILDING_KANA, PROPERTY_PAGE, TARGET_URL, DEBUG_TAG
+    global BUILDING, BUILDING_KANA, PROPERTY_PAGE, TARGET_URL, DEBUG_TAG, IMPORTANT
+    IMPORTANT = bool(target.get("important"))
     BUILDING = target["name"]
     BUILDING_KANA = target["kana"]
     PROPERTY_PAGE = target["page"]
@@ -213,6 +221,8 @@ def post_discord(content: str, embeds=None) -> None:
     payload = {"username": "JKKあき家ウォッチャー", "content": content[:1900]}
     if embeds:
         payload["embeds"] = embeds[:10]
+    # 本文に @everyone があるときは、チャンネル全員への呼び出しとして届ける
+    payload["allowed_mentions"] = {"parse": ["everyone"] if "@everyone" in content else []}
 
     for attempt in range(3):
         try:
@@ -773,11 +783,13 @@ def check_once() -> None:
         """取得できなかったときの共通処理。前回の掲載記録は消さずに残す。"""
         state["fail_streak"] = int(state.get("fail_streak", 0)) + 1
         log(f"取得に失敗しました（連続 {state['fail_streak']} 回目）: {reason}")
-        # 約1時間続けて失敗したら知らせる。その後も直らなければ約5時間おきに再送
+        # 約1時間続けて失敗したら知らせる。その後も直らなければ約5時間おきに再送。
+        # 「重要」の住宅は、約15分（2回）続いたら知らせ、その後は約1時間おきに再送
         streak = state["fail_streak"]
-        if streak == 6 or (streak > 6 and streak % 36 == 0):
+        first, every, span = (2, 6, "15分") if IMPORTANT else (6, 36, "1時間")
+        if streak == first or (streak > first and streak % every == 0):
             post_discord(
-                f"⚠️「{BUILDING}」の監視が1時間ほど連続で失敗しています。\n"
+                f"⚠️「{BUILDING}」の監視が{span}ほど連続で失敗しています。\n"
                 "サイトのメンテナンス中か、ページ構成が変わった可能性があります。\n"
                 f"Actionsタブから手動実行して debug/{DEBUG_TAG}.png を確認してください。\n"
                 f"詳細: `{reason[:300]}`"
@@ -821,7 +833,8 @@ def check_once() -> None:
         log(f"ページ本文の冒頭: {normalize(body_text)[:300]}")
         if state.get("last_state") != "suspect":
             post_discord(
-                f"⚠️ **確認してください**「{BUILDING}」がJKKの画面に出ていますが、"
+                ("@everyone " if IMPORTANT else "")
+                + f"⚠️ **確認してください**「{BUILDING}」がJKKの画面に出ていますが、"
                 "部屋の詳細を読み取れませんでした。\n"
                 "**掲載が始まっている可能性があります。**\n\n"
                 f"▼ 今すぐ確認\n{PROPERTY_PAGE}\n"
@@ -860,11 +873,12 @@ def check_once() -> None:
     if new_ids:
         new_rooms = [current[rid] for rid in new_ids]
         has_target = any(r["is_target"] for r in new_rooms)
-        headline = (
-            f"🎯🎉 **本命の部屋が出ました！**「{BUILDING}」"
-            if has_target
-            else f"🏠 **「{BUILDING}」にあき家が出ました**"
-        )
+        if IMPORTANT:
+            headline = f"@everyone 🔥 **【重要】「{BUILDING}」にあき家が出ました！**"
+        elif has_target:
+            headline = f"🎯🎉 **本命の部屋が出ました！**「{BUILDING}」"
+        else:
+            headline = f"🏠 **「{BUILDING}」にあき家が出ました**"
         lines = "\n".join(f"・{format_room(r)}" for r in new_rooms)
         # 読み取れない項目（—）がある部屋は、JKKの画面から拾った行をそのまま添える。
         # 原因調査の手がかりになり、通知を見た人の判断材料にもなる。
@@ -882,7 +896,7 @@ def check_once() -> None:
         embeds = [{
             "title": f"{BUILDING} あき家情報（{len(new_rooms)}件）",
             "url": PROPERTY_PAGE,
-            "color": 0xE8453C if has_target else 0x3BA55D,
+            "color": 0xE8453C if (has_target or IMPORTANT) else 0x3BA55D,
             "description": (lines + raw_note)[:3900],
             "footer": {"text": f"検知時刻 {now_jst():%Y-%m-%d %H:%M} JST"},
         }]
