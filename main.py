@@ -4,7 +4,7 @@
 JKKねっと「あき家検索」自動監視スクリプト
 ==========================================
 
-指定した住宅（既定：コーシャハイム久我山）のあき家状況を定期的にチェックし、
+指定した住宅（複数可）のあき家状況を定期的にチェックし、
 "新しく出てきた部屋" だけを Discord に通知します。
 
 【JKKねっとの特殊な作りと、その攻略法】
@@ -19,12 +19,11 @@ JKKねっと「あき家検索」自動監視スクリプト
 
 【必要な環境変数】GitHub Actions の Secrets / env から渡します
   DISCORD_WEBHOOK_URL  … 必須。Discord の Webhook URL
-  TARGET_BUILDING      … 住宅名（表示用）     既定: コーシャハイム久我山
-  TARGET_BUILDING_KANA … 住宅名のカタカナ表記 既定: コーシャハイムクガヤマ
-  TARGET_PROPERTY_PAGE … JKK公式のその住宅のページURL（経由地として使う）
-  HIGHLIGHT_TOU        … 本命の棟（任意）     既定: D
-  HIGHLIGHT_FLOOR      … 本命の階（任意）     既定: 4
-  HIGHLIGHT_MADORI     … 本命の間取り（任意） 既定: 3LDK
+  WATCH_TARGETS        … 見張る住宅の一覧。1行に1住宅、次の形で書く
+                           表示名 | カタカナ名 | JKK公式の住宅ページのURL
+                         カタカナ名は、公式ページの「最新の空室状況を確認する」
+                         リンクの jutaku_name から逆算したものを使う（推測しない）
+  HIGHLIGHT_TOU / _FLOOR / _MADORI / _AREA … 本命マーク🎯の条件（任意・既定は無し）
   STRICT_MODE          … "true" で本命条件に一致した部屋だけ通知（既定 false）
   SEND_DAILY_HEARTBEAT … "true" で1日1回「稼働中です」を通知（既定 false）
 """
@@ -51,25 +50,26 @@ from playwright.sync_api import sync_playwright
 
 JST = datetime.timezone(datetime.timedelta(hours=9))
 
-BUILDING = os.getenv("TARGET_BUILDING", "コーシャハイム久我山").strip()
-BUILDING_KANA = os.getenv("TARGET_BUILDING_KANA", "コーシャハイムクガヤマ").strip()
+# 以前の版（1住宅だけ見張っていた版）の記録を引き継ぐときの住宅名
+LEGACY_BUILDING = "コーシャハイム久我山"
 
-HIGHLIGHT_TOU = os.getenv("HIGHLIGHT_TOU", "D").strip().upper()
-HIGHLIGHT_FLOOR = os.getenv("HIGHLIGHT_FLOOR", "4").strip()
-HIGHLIGHT_MADORI = os.getenv("HIGHLIGHT_MADORI", "3LDK").strip().upper()
-# 検索結果の一覧には棟や階が出ないため、面積が本命を見分ける手がかりになる
-HIGHLIGHT_AREA = os.getenv("HIGHLIGHT_AREA", "63.3").strip()
+# いま確認している住宅の情報。見張りループの中で use_target() が1住宅ずつ切り替える
+BUILDING = ""
+BUILDING_KANA = ""
+PROPERTY_PAGE = ""
+TARGET_URL = ""
+DEBUG_TAG = "page"
+
+# 本命マーク🎯の条件。空なら🎯は付かない（通知自体はすべての部屋で届く）
+HIGHLIGHT_TOU = os.getenv("HIGHLIGHT_TOU", "").strip().upper()
+HIGHLIGHT_FLOOR = os.getenv("HIGHLIGHT_FLOOR", "").strip()
+HIGHLIGHT_MADORI = os.getenv("HIGHLIGHT_MADORI", "").strip().upper()
+HIGHLIGHT_AREA = os.getenv("HIGHLIGHT_AREA", "").strip()
 
 STRICT_MODE = os.getenv("STRICT_MODE", "false").lower() == "true"
 SEND_DAILY_HEARTBEAT = os.getenv("SEND_DAILY_HEARTBEAT", "false").lower() == "true"
 
 WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
-
-# JKK公式の物件ページ。ここを経由することで「URL直接入力」扱いを回避する
-PROPERTY_PAGE = os.getenv(
-    "TARGET_PROPERTY_PAGE",
-    "https://www.to-kousya.or.jp/chintai/reco/kh_kugayama.html",
-).strip()
 
 STATE_PATH = pathlib.Path("state.json")
 DEBUG_DIR = pathlib.Path("debug")
@@ -95,7 +95,43 @@ def build_direct_url(kana: str) -> str:
     )
 
 
-TARGET_URL = build_direct_url(BUILDING_KANA)
+def load_targets() -> list:
+    """
+    見張る住宅の一覧を読み込む。WATCH_TARGETS の1行が1住宅。
+      表示名 | カタカナ名 | JKK公式の住宅ページのURL
+    公式ページは「URL直接入力」扱いを避けるための経由地で、通知のリンク先にも使う。
+    """
+    targets = []
+    for line in os.getenv("WATCH_TARGETS", "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [x.strip() for x in line.split("|")]
+        if len(parts) < 3 or not all(parts[:3]):
+            print(f"WATCH_TARGETS の書き方が違う行を飛ばします: {line}", flush=True)
+            continue
+        targets.append({"name": parts[0], "kana": parts[1], "page": parts[2]})
+    if not targets:
+        # 以前の版の設定（1住宅だけ）にも対応しておく
+        targets.append({
+            "name": os.getenv("TARGET_BUILDING", LEGACY_BUILDING).strip(),
+            "kana": os.getenv("TARGET_BUILDING_KANA", "コーシャハイムクガヤマ").strip(),
+            "page": os.getenv(
+                "TARGET_PROPERTY_PAGE",
+                "https://www.to-kousya.or.jp/chintai/reco/kh_kugayama.html",
+            ).strip(),
+        })
+    return targets
+
+
+def use_target(target: dict, number: int) -> None:
+    """これから確認する住宅に切り替える。"""
+    global BUILDING, BUILDING_KANA, PROPERTY_PAGE, TARGET_URL, DEBUG_TAG
+    BUILDING = target["name"]
+    BUILDING_KANA = target["kana"]
+    PROPERTY_PAGE = target["page"]
+    TARGET_URL = build_direct_url(BUILDING_KANA)
+    DEBUG_TAG = f"page-{number}"   # 住宅ごとに画面の記録を分ける（page-1.png など）
 
 
 # ---------------------------------------------------------------------------
@@ -126,12 +162,34 @@ def fold(text: str) -> str:
 
 
 def load_state() -> dict:
+    """
+    記録を読み込む。住宅ごとの記録は state["buildings"][住宅名] に入っている。
+    以前の版（1住宅だけ）の記録が見つかったら、久我山の記録として引き継ぐ。
+    これにより、通知済みの部屋が「新着」としてもう一度届くことはない。
+    """
+    state = {}
     if STATE_PATH.exists():
         try:
-            return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+            state = json.loads(STATE_PATH.read_text(encoding="utf-8"))
         except Exception:
             log("state.json が壊れていたので新しく作り直します")
-    return {"active": {}, "fail_streak": 0, "heartbeat_date": "", "date": ""}
+            state = {}
+    if not isinstance(state.get("buildings"), dict):
+        buildings = {}
+        if "active" in state:
+            buildings[LEGACY_BUILDING] = {
+                "active": state.get("active") or {},
+                "fail_streak": int(state.get("fail_streak", 0)),
+                "last_state": state.get("last_state", ""),
+            }
+        state = {
+            "buildings": buildings,
+            "date": state.get("date", ""),
+            "heartbeat_date": state.get("heartbeat_date", ""),
+        }
+    state.setdefault("date", "")
+    state.setdefault("heartbeat_date", "")
+    return state
 
 
 def save_state(state: dict) -> None:
@@ -451,9 +509,9 @@ def save_debug(page, body_text: str) -> None:
     """あとから中身を確認できるように、画面と本文を残す。"""
     try:
         DEBUG_DIR.mkdir(exist_ok=True)
-        (DEBUG_DIR / "page.txt").write_text(body_text, encoding="utf-8")
-        (DEBUG_DIR / "page.html").write_text(page.content(), encoding="utf-8")
-        page.screenshot(path=str(DEBUG_DIR / "page.png"), full_page=True)
+        (DEBUG_DIR / f"{DEBUG_TAG}.txt").write_text(body_text, encoding="utf-8")
+        (DEBUG_DIR / f"{DEBUG_TAG}.html").write_text(page.content(), encoding="utf-8")
+        page.screenshot(path=str(DEBUG_DIR / f"{DEBUG_TAG}.png"), full_page=True)
     except Exception as e:  # noqa: BLE001
         log(f"デバッグ出力の保存に失敗（無視して続行）: {e}")
 
@@ -639,16 +697,16 @@ def format_room(room: dict) -> str:
 
 def keep_debug_snapshot(label: str) -> None:
     """
-    いまの画面の記録（debug/page.*）を、上書きされない名前で残しておく。
+    いまの住宅の画面の記録（debug/page-番号.*）を、上書きされない名前で残しておく。
     debug/ は最後の1回分しか残らないので、新着を検知した瞬間の画面を別に取っておく。
     実行の終了時に Artifact（debug-◯）としてまとめて保存される。
     """
     stamp = f"{now_jst():%Y%m%d-%H%M}"
     for ext in ("txt", "html", "png"):
-        src = DEBUG_DIR / f"page.{ext}"
+        src = DEBUG_DIR / f"{DEBUG_TAG}.{ext}"
         if src.exists():
             try:
-                shutil.copy(src, DEBUG_DIR / f"{label}-{stamp}.{ext}")
+                shutil.copy(src, DEBUG_DIR / f"{label}-{DEBUG_TAG}-{stamp}.{ext}")
             except Exception as e:  # noqa: BLE001
                 log(f"画面記録のコピーに失敗（無視して続行）: {e}")
 
@@ -704,8 +762,12 @@ def push_state_now(reason: str) -> None:
 
 def check_once() -> None:
     """1回ぶんの確認。ページを見て、新着があれば通知し、状態を保存する。"""
-    state = load_state()
+    full = load_state()
     today = f"{now_jst():%Y-%m-%d}"
+    # この住宅の記録（なければ空で作る）
+    state = full["buildings"].setdefault(
+        BUILDING, {"active": {}, "fail_streak": 0, "last_state": ""}
+    )
 
     def record_failure(reason: str) -> None:
         """取得できなかったときの共通処理。前回の掲載記録は消さずに残す。"""
@@ -715,13 +777,13 @@ def check_once() -> None:
         streak = state["fail_streak"]
         if streak == 6 or (streak > 6 and streak % 36 == 0):
             post_discord(
-                "⚠️ JKKねっとの監視が1時間ほど連続で失敗しています。\n"
+                f"⚠️「{BUILDING}」の監視が1時間ほど連続で失敗しています。\n"
                 "サイトのメンテナンス中か、ページ構成が変わった可能性があります。\n"
-                "Actionsタブから手動実行して debug/page.png を確認してください。\n"
+                f"Actionsタブから手動実行して debug/{DEBUG_TAG}.png を確認してください。\n"
                 f"詳細: `{reason[:300]}`"
             )
-        state["date"] = today
-        save_state(state)
+        full["date"] = today
+        save_state(full)
 
     try:
         body_text, rows, name_hit, page_state, final_url = fetch_page()
@@ -738,6 +800,7 @@ def check_once() -> None:
     text_hash = hashlib.sha1(normalize(body_text).encode("utf-8")).hexdigest()[:8]
     append_history({
         "t": f"{now_jst():%Y-%m-%d %H:%M:%S}",
+        "b": BUILDING,
         "state": page_state,
         "rows": len(rows),
         "name_hit": name_hit,
@@ -766,9 +829,9 @@ def check_once() -> None:
             )
         notified = state.get("last_state") != "suspect"
         state["last_state"] = "suspect"
-        state["date"] = today
+        full["date"] = today
         state["fail_streak"] = 0
-        save_state(state)
+        save_state(full)
         if notified:
             keep_debug_snapshot("suspect")
             push_state_now("要確認の通知を送った")
@@ -832,20 +895,12 @@ def check_once() -> None:
     if gone_ids:
         log(f"掲載が終了した部屋: {len(gone_ids)} 件（記録から削除しました）")
 
-    # --- 1日1回の生存確認（任意） ---
-    if SEND_DAILY_HEARTBEAT and state.get("heartbeat_date") != today:
-        state["heartbeat_date"] = today
-        post_discord(
-            f"✅ 監視は正常に動いています（{now_jst():%m/%d %H:%M} 時点）。"
-            f"現在の掲載数: {len(current)} 件"
-        )
-
     # --- 状態を保存 ---
     # date は1日1回だけ変わる。これによりリポジトリが「60日間更新なし」で
     # 自動停止されるのを防ぎつつ、コミットは1日1回程度に抑えられる。
     state["active"] = current
-    state["date"] = today
-    save_state(state)
+    full["date"] = today
+    save_state(full)
 
     # 新着を通知したら、ジョブの終了を待たずにすぐ記録を保存する。
     # 途中でジョブが止まっても「通知済み」の記憶が残り、同じ部屋の重複通知を防げる。
@@ -875,14 +930,35 @@ def within_active_hours(now: datetime.datetime) -> bool:
     return ACTIVE_START_HOUR <= now.hour < ACTIVE_END_HOUR
 
 
+def send_heartbeat_if_needed(targets: list) -> None:
+    """1日1回だけ「稼働中」を知らせる（SEND_DAILY_HEARTBEAT が true のときだけ）。"""
+    if not SEND_DAILY_HEARTBEAT:
+        return
+    full = load_state()
+    today = f"{now_jst():%Y-%m-%d}"
+    if full.get("heartbeat_date") == today:
+        return
+    full["heartbeat_date"] = today
+    save_state(full)
+    lines = []
+    for t in targets:
+        b = full["buildings"].get(t["name"], {})
+        lines.append(f"・{t['name']}：掲載 {len(b.get('active', {}))} 件")
+    post_discord(
+        f"✅ 監視は正常に動いています（{now_jst():%m/%d %H:%M} 時点）\n" + "\n".join(lines)
+    )
+
+
 def main() -> int:
     deadline = time.time() + LOOP_MINUTES * 60
     count = 0
+    targets = load_targets()
 
     log(
         f"見張りを開始します（最長 {LOOP_MINUTES} 分 / 約 {CHECK_INTERVAL} 分おき / "
         f"JST {ACTIVE_START_HOUR}時〜{ACTIVE_END_HOUR}時・月〜土）"
     )
+    log("見張る住宅: " + " / ".join(t["name"] for t in targets))
 
     while True:
         now = now_jst()
@@ -892,10 +968,21 @@ def main() -> int:
 
         count += 1
         log(f"───── {count} 回目の確認 ─────")
+        for number, target in enumerate(targets, 1):
+            if number > 1:
+                # 住宅と住宅のあいだに少し間を空ける（JKKへのアクセスを詰めすぎない）
+                time.sleep(random.randint(10, 30))
+            use_target(target, number)
+            log(f"▶ {BUILDING}（{number}/{len(targets)}）")
+            try:
+                check_once()
+            except Exception as e:  # noqa: BLE001
+                # 1つの住宅で問題が起きても、ほかの住宅の確認は続ける
+                log(f"「{BUILDING}」の確認中に想定外のエラーが起きました（続行します）: {e}")
         try:
-            check_once()
+            send_heartbeat_if_needed(targets)
         except Exception as e:  # noqa: BLE001
-            log(f"確認中に想定外のエラーが起きました（続行します）: {e}")
+            log(f"生存確認の通知でエラー（無視して続行）: {e}")
 
         # 次の確認まで待つ。毎回わずかにずらして機械的な等間隔アクセスを避ける
         wait = CHECK_INTERVAL * 60 + random.randint(0, 60)
