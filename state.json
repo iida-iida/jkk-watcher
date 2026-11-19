@@ -1,11 +1,33 @@
 {
   "buildings": {
+    "カーメスト大蔵の杜": {
+      "active": {},
+      "fail_streak": 0,
+      "last_state": "empty"
+    },
     "コーシャハイム久我山": {
+      "active": {
+        "56fca00505ee": {
+          "area": "—",
+          "floor": "—",
+          "id": "56fca00505ee",
+          "is_target": false,
+          "madori": "2LDK",
+          "raw": "C-106 1～ Ｌ２ 注意 ２ＬＤＫ 南東 133,700 267,400 7,600 世田谷区北烏山二丁目１０－Ｃ 即入居可",
+          "rent": "133,700円",
+          "tou": "—",
+          "yusen": "—"
+        }
+      },
+      "fail_streak": 0,
+      "last_state": "results"
+    },
+    "トミンハイム玉川田園調布": {
       "active": {},
       "fail_streak": 0,
       "last_state": "empty"
     }
   },
-  "date": "2026-11-18",
+  "date": "2026-11-19",
   "heartbeat_date": "2026-09-14"
 }
