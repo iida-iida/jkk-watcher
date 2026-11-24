@@ -1,75 +1,3 @@
-{"t": "2026-10-07 14:02:21", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 14:11:33", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 14:20:40", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 14:29:44", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 14:38:43", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 14:47:22", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 14:56:34", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 15:05:27", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 15:14:09", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 15:23:27", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 15:32:19", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 15:41:18", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 15:49:38", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 15:58:19", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 16:07:10", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 16:15:53", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 16:25:08", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 16:33:36", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 16:43:04", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 16:51:58", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 17:00:55", "state": "results", "rows": 1, "name_hit": true, "hash": "732624e7", "sample": ["B-102 1～ Ｃ１ 注意 ２Ｋ 南西 107,900 215,800 7,600 世田谷区北烏山二丁目１０－Ｂ 即入居可"]}
-{"t": "2026-10-07 17:09:32", "state": "results", "rows": 1, "name_hit": true, "hash": "732624e7", "sample": ["B-102 1～ Ｃ１ 注意 ２Ｋ 南西 107,900 215,800 7,600 世田谷区北烏山二丁目１０－Ｂ 即入居可"]}
-{"t": "2026-10-07 17:18:22", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 17:27:14", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 17:35:49", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 17:44:23", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-07 17:53:21", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 09:02:38", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 09:11:14", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 09:20:19", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 09:29:01", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 09:37:26", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 09:46:26", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 09:55:41", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 10:04:36", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 10:13:20", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 10:21:48", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 10:30:28", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 10:38:46", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 10:47:36", "state": "empty", "rows": 0, "name_hit": false, "hash": "29519d94", "sample": []}
-{"t": "2026-10-08 10:56:36", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 11:05:14", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 11:13:52", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 11:23:10", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 11:32:04", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 11:40:27", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 11:49:28", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 11:58:32", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 12:07:45", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 12:16:11", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 12:24:38", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 12:33:00", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 12:41:37", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 12:50:11", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 12:58:38", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 13:07:33", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 13:16:37", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 13:25:50", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 13:34:26", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 13:43:41", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 13:52:39", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 14:01:09", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 14:02:13", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 14:11:17", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 14:19:40", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 14:28:08", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 14:36:54", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 14:45:59", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 14:55:13", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 15:04:06", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 15:13:22", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
-{"t": "2026-10-08 15:22:15", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
 {"t": "2026-10-08 15:31:03", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
 {"t": "2026-10-08 15:40:00", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
 {"t": "2026-10-08 15:49:18", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
@@ -2998,3 +2926,75 @@
 {"t": "2026-11-24 13:56:34", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
 {"t": "2026-11-24 13:57:07", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
 {"t": "2026-11-24 13:57:39", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:01:28", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:01:57", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:02:36", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:11:29", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:11:58", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:12:29", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:21:37", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:22:15", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:22:52", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:31:13", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:31:45", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "29519d94", "sample": []}
+{"t": "2026-11-24 14:32:13", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:41:07", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:41:53", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:42:25", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:51:38", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:52:08", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 14:52:46", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:02:00", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:02:48", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:03:24", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:12:20", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:12:48", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:13:20", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:21:50", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:22:26", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:23:12", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:32:01", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:32:38", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:33:24", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:42:06", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:42:42", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:43:12", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:51:34", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:52:13", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 15:52:47", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:01:42", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:02:18", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:02:53", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:12:09", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:12:48", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:13:29", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:21:59", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:22:28", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:23:06", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:31:40", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:32:13", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:32:42", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:41:51", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:42:23", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:42:55", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:51:18", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:51:59", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 16:52:45", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:02:06", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:02:45", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:03:24", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:12:39", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:13:10", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:13:37", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:22:04", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:22:51", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:23:36", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:32:49", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:33:20", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:34:09", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:43:00", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:43:46", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:44:33", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:53:12", "b": "トミンハイム玉川田園調布", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:53:46", "b": "コーシャハイム久我山", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
+{"t": "2026-11-24 17:54:34", "b": "カーメスト大蔵の杜", "state": "empty", "rows": 0, "name_hit": false, "hash": "9b2131ec", "sample": []}
