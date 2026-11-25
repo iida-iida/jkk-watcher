@@ -11,21 +11,9 @@
       "last_state": "empty"
     },
     "トミンハイム玉川田園調布": {
-      "active": {
-        "d1d61049ba52": {
-          "area": "—",
-          "floor": "—",
-          "id": "d1d61049ba52",
-          "is_target": false,
-          "madori": "1R",
-          "raw": "12-204 1～ Ｈ１Ｒ１ 注意 ２ＬＤＫ 南西 183,700 367,400 9,000 世田谷区玉川田園調布１－１９－１２ 即入居可",
-          "rent": "183,700円",
-          "tou": "—",
-          "yusen": "—"
-        }
-      },
+      "active": {},
       "fail_streak": 0,
-      "last_state": "results"
+      "last_state": "empty"
     }
   },
   "date": "2026-11-25",
